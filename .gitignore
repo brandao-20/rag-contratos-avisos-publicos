@@ -1,0 +1,164 @@
+# -----------------------------
+# Python bytecode / cache
+# -----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# -----------------------------
+# Builds / packaging
+# -----------------------------
+build/
+dist/
+.eggs/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# -----------------------------
+# Virtual environments
+# -----------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# -----------------------------
+# Testes / coverage / caches
+# -----------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+
+# -----------------------------
+# Logs / runtime
+# -----------------------------
+*.log
+logs/
+*.pid
+*.seed
+*.out
+*.err
+
+# -----------------------------
+# Jupyter / notebooks
+# -----------------------------
+.ipynb_checkpoints/
+
+# -----------------------------
+# IDE / Editor
+# -----------------------------
+.vscode/
+.idea/
+*.code-workspace
+
+# -----------------------------
+# Sistema operativo
+# -----------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# -----------------------------
+# Variáveis de ambiente / segredos
+# -----------------------------
+.env
+.env.*
+!.env.example
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# -----------------------------
+# Streamlit / app local state
+# -----------------------------
+.streamlit/cache/
+.streamlit/session_state/
+
+# -----------------------------
+# Chroma / vector DB / índices gerados
+# -----------------------------
+chroma_db/
+chroma/
+*.chroma/
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+
+# -----------------------------
+# Dados gerados / temporários
+# -----------------------------
+data/processed/
+data/tmp/
+data/temp/
+data/exports/
+data/cache/
+data/raw_docs_backup/
+data/raw_docs/_quarentena/
+data/manifests/*.generated.csv
+data/manifests/*.generated.json
+data/manifests/*.tmp.csv
+data/manifests/*.tmp.json
+
+# -----------------------------
+# Saídas geradas pela app
+# -----------------------------
+outputs/
+reports/
+artifacts/
+exports/
+tmp/
+temp/
+
+# -----------------------------
+# Ficheiros auxiliares do Windows
+# -----------------------------
+*.lnk
+
+# -----------------------------
+# Frontend futuro (caso adaptes para React/Vite)
+# -----------------------------
+node_modules/
+frontend/node_modules/
+ui/node_modules/
+dist-ssr/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# -----------------------------
+# TypeScript / JS build caches
+# -----------------------------
+*.tsbuildinfo
+
+# -----------------------------
+# FastAPI / uvicorn local
+# -----------------------------
+.uvicorn/
+uvicorn.log
+
+# -----------------------------
+# Modelos locais / pesos / embeddings dumps
+# -----------------------------
+models/
+checkpoints/
+weights/
+*.bin
+*.safetensors
+
+# -----------------------------
+# PDFs temporários / downloads incompletos
+# -----------------------------
+*.part
+*.crdownload
+*.download
