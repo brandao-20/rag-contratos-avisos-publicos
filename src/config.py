@@ -1,58 +1,106 @@
-"""Configurações centralizadas para a aplicação.
+"""Configurações centrais do projeto RAG para avisos/contratos públicos."""
 
-Este módulo define constantes e funções utilitárias para configurar os modelos,
-o tamanho dos blocos de texto, caminhos para dados e parâmetros de recuperação.
-As configurações podem ser ajustadas conforme necessário para adaptar o
-comportamento da aplicação.
-"""
+from __future__ import annotations
 
+import os
 from pathlib import Path
-from typing import Optional
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = PROJECT_ROOT / "data"
+RAW_DOCS_DIR = DATA_DIR / "raw_docs"
+MANIFEST_DIR = DATA_DIR / "manifests"
+APP_STATE_DIR = DATA_DIR / "app_state"
+CHROMA_DIR = PROJECT_ROOT / "chroma_db"
+TESTS_DIR = PROJECT_ROOT / "tests"
 
-# Pasta onde os documentos originais (.pdf/.txt/.md) estão armazenados.
-RAW_DOCS_DIR: Path = Path("data/raw_docs")
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "950"))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "150"))
+TOP_K = int(os.getenv("TOP_K", "4"))
+RETRIEVAL_CANDIDATES = int(os.getenv("RETRIEVAL_CANDIDATES", "18"))
 
-# Pasta onde a base de dados vetorial Chroma será persistida.
-CHROMA_DIR: Path = Path("chroma_db")
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
+LLM_MODEL_NAME = os.getenv("LLM_MODEL", "mistral")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_REQUEST_TIMEOUT = int(os.getenv("OLLAMA_REQUEST_TIMEOUT", "120"))
 
-# Tamanho dos blocos de texto (em caracteres) usados para os embeddings.
-CHUNK_SIZE: int = 800
+SESSIONS_FILE = APP_STATE_DIR / "sessions.json"
+GOLDEN_QA_FILE = TESTS_DIR / "golden_qa_publicos.json"
 
-# Número de caracteres de sobreposição entre blocos consecutivos.
-CHUNK_OVERLAP: int = 100
+INTENT_SYNONYMS = {
+    "objeto": ["objeto", "designacao", "designação", "descrição", "descricao", "contrato", "aquisição", "aquisicao", "empreitada", "serviço", "servico"],
+    "prazo": ["prazo", "data limite", "dias", "prazo apresentação", "prazo de execução", "prazo de candidatura", "apresentação das propostas", "apresentacao das propostas", "prazo para apresentação"],
+    "requisitos": ["requisito", "habilitação", "habilitacao", "habilitações", "participação", "participacao", "admissão", "admissao", "alvará", "alvara", "documentos de habilitação", "documentos de habilitacao"],
+    "valor": ["preço base", "preco base", "valor base", "orçamento", "orcamento", "eur", "euros", "montante"],
+    "criterios": ["critério", "criterio", "adjudicação", "adjudicacao", "monofator", "multifator", "ponderação", "ponderacao", "preço", "qualidade"],
+    "entidade": ["entidade adjudicante", "entidade", "adjudicante", "emitente", "município", "municipio", "universidade", "secretaria", "epe"],
+    "local": ["local", "execução", "execucao", "freguesia", "concelho", "distrito", "instalações", "instalacoes", "localidade"],
+    "legal": ["artigo", "regime", "lei", "portaria", "decreto-lei", "fundamento legal"],
+    "caucao": ["caução", "caucao", "prestação de caução", "prestacao de caucao", "garantia exigida", "garantia"],
+    "cpv": ["cpv", "vocabulário principal", "vocabulário comum para os contratos públicos", "vocabulário comum", "vocabulário"],
+    "lotes": ["lotes", "procedimento com lotes", "tem lotes", "há lotes", "ha lotes"],
+}
 
-# Nome do modelo de embeddings a usar com Ollama.
-# Por omissão usa-se 'mistral', mas pode ser alterado para outro modelo
-# disponível localmente. Este nome é passado para `OllamaEmbeddings`.
-EMBEDDING_MODEL_NAME: str = "mistral"
+QUESTION_SUGGESTIONS = [
+    "Qual é o objeto deste aviso ou contrato?",
+    "Existe preço base ou valor base?",
+    "Qual é o prazo para apresentação das propostas?",
+    "Existe prestação de caução?",
+    "Qual é o CPV indicado?",
+    "Que critérios de adjudicação são referidos?",
+]
 
-# Nome do modelo de LLM para geração de respostas. Por omissão 'mistral'.
-LLM_MODEL_NAME: str = "mistral"
-
-# Número máximo de documentos a recuperar por pergunta.
-TOP_K: int = 4
+FOLLOW_UP_BY_INTENT = {
+    "objeto": [
+        "Existe preço base ou valor base?",
+        "Qual é o prazo de execução do contrato?",
+        "Qual é o CPV indicado?",
+    ],
+    "prazo": [
+        "Existe prestação de caução?",
+        "Que critérios de adjudicação são referidos?",
+        "Quem é a entidade adjudicante?",
+    ],
+    "requisitos": [
+        "Existe alvará ou habilitação específica?",
+        "Há documentos obrigatórios na candidatura?",
+        "Qual é o prazo de apresentação?",
+    ],
+    "valor": [
+        "Existe prestação de caução?",
+        "O procedimento tem lotes?",
+        "Qual é o critério de adjudicação?",
+    ],
+    "criterios": [
+        "Existe preço base?",
+        "Qual é o prazo para apresentação das propostas?",
+        "Há negociação prevista?",
+    ],
+    "caucao": [
+        "Qual é a percentagem da caução?",
+        "Qual é o preço base?",
+        "O procedimento tem lotes?",
+    ],
+    "cpv": [
+        "Qual é o objeto do contrato?",
+        "Qual é o preço base?",
+        "Qual é o prazo de apresentação das propostas?",
+    ],
+    "lotes": [
+        "Existe preço base?",
+        "Qual é o objeto do contrato?",
+        "Qual é o critério de adjudicação?",
+    ],
+}
 
 
 def ensure_directories() -> None:
-    """Garante que as pastas essenciais existem no sistema de ficheiros.
-
-    Esta função deve ser chamada antes de executar operações que dependam
-    da existência das pastas (por exemplo, criação do índice Chroma).
-    """
     RAW_DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    MANIFEST_DIR.mkdir(parents=True, exist_ok=True)
+    APP_STATE_DIR.mkdir(parents=True, exist_ok=True)
     CHROMA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_model_names() -> tuple[str, str]:
-    """Obtém os nomes dos modelos de embeddings e LLM.
-
-    Retorna uma tupla `(embedding_model_name, llm_model_name)`. Se variáveis de
-    ambiente específicas estiverem definidas (por exemplo, `EMBEDDING_MODEL` ou
-    `LLM_MODEL`), estas substituem os valores por defeito. Isto permite ao
-    utilizador ajustar rapidamente o modelo sem alterar o código.
-    """
-    import os
     embedding = os.getenv("EMBEDDING_MODEL", EMBEDDING_MODEL_NAME)
     llm = os.getenv("LLM_MODEL", LLM_MODEL_NAME)
     return embedding, llm

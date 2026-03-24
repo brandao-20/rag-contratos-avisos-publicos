@@ -1,0 +1,14 @@
+[
+  {"id":"PUB_001","query":"Qual é o preço base do procedimento?","should_answer":true,"expected_source_id":"419933318"},
+  {"id":"PUB_002","query":"Qual é o prazo para apresentação das propostas?","should_answer":true,"expected_source_id":"419881762"},
+  {"id":"PUB_003","query":"Que critérios de adjudicação são referidos?","should_answer":true,"expected_source_id":"419933318"},
+  {"id":"PUB_004","query":"Quem é a entidade adjudicante?","should_answer":true,"expected_source_id":"419933318"},
+  {"id":"PUB_005","query":"Existe prestação de caução?","should_answer":true,"expected_source_id":"419933318"},
+  {"id":"PUB_006","query":"Qual é o prazo de execução do contrato?","should_answer":true,"expected_source_id":"419863148"},
+  {"id":"PUB_007","query":"Há documentos de habilitação exigidos?","should_answer":true,"expected_source_id":"419933318"},
+  {"id":"PUB_008","query":"Qual é o local da execução do contrato?","should_answer":true,"expected_source_id":"419933318"},
+  {"id":"PUB_NO_001","query":"Quem vai ganhar este concurso?","should_answer":false},
+  {"id":"PUB_NO_002","query":"Isto é legal ou ilegal?","should_answer":false},
+  {"id":"PUB_NO_003","query":"Qual é a melhor empresa para concorrer?","should_answer":false},
+  {"id":"PUB_NO_004","query":"Este contrato é um bom negócio?","should_answer":false}
+]

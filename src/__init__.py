@@ -1,1 +1,3 @@
-"""Pacote da aplicação RAG para avisos/contratos públicos."""
+"""Projeto RAG para contratos e avisos públicos."""
+
+__all__ = []

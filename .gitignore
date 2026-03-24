@@ -1,33 +1,15 @@
-# -----------------------------
-# Python bytecode / cache
-# -----------------------------
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-*.pyo
-*.pyd
 
-# -----------------------------
-# Builds / packaging
-# -----------------------------
-build/
-dist/
-.eggs/
-*.egg-info/
-*.egg
-pip-wheel-metadata/
-
-# -----------------------------
-# Virtual environments
-# -----------------------------
+# Virtual env
 .venv/
 venv/
 env/
 ENV/
 
-# -----------------------------
-# Testes / coverage / caches
-# -----------------------------
+# Caches / tests
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -38,127 +20,45 @@ ENV/
 htmlcov/
 .cache/
 
-# -----------------------------
-# Logs / runtime
-# -----------------------------
-*.log
-logs/
-*.pid
-*.seed
-*.out
-*.err
-
-# -----------------------------
-# Jupyter / notebooks
-# -----------------------------
-.ipynb_checkpoints/
-
-# -----------------------------
-# IDE / Editor
-# -----------------------------
+# IDE
 .vscode/
 .idea/
 *.code-workspace
 
-# -----------------------------
-# Sistema operativo
-# -----------------------------
+# OS
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# -----------------------------
-# Variáveis de ambiente / segredos
-# -----------------------------
+# Secrets
 .env
 .env.*
 !.env.example
-
-# Streamlit secrets
 .streamlit/secrets.toml
 
-# -----------------------------
-# Streamlit / app local state
-# -----------------------------
-.streamlit/cache/
-.streamlit/session_state/
-
-# -----------------------------
-# Chroma / vector DB / índices gerados
-# -----------------------------
+# Generated local DB / state
 chroma_db/
-chroma/
-*.chroma/
-*.sqlite3
-*.sqlite3-shm
-*.sqlite3-wal
+data/app_state/*.json
 
-# -----------------------------
-# Dados gerados / temporários
-# -----------------------------
-data/processed/
-data/tmp/
-data/temp/
-data/exports/
-data/cache/
-data/raw_docs_backup/
-data/raw_docs/_quarentena/
-data/manifests/*.generated.csv
-data/manifests/*.generated.json
-data/manifests/*.tmp.csv
-data/manifests/*.tmp.json
-
-# -----------------------------
-# Saídas geradas pela app
-# -----------------------------
+# Temporary/generated artifacts
 outputs/
 reports/
 artifacts/
 exports/
 tmp/
 temp/
+data/processed/
+data/cache/
+data/raw_docs_backup/
+data/raw_docs/_quarentena/
+data/manifests/pdf_quality_report.csv
+data/manifests/pdf_quality_report.json
+tests/golden_report_publicos.json
 
-# -----------------------------
-# Ficheiros auxiliares do Windows
-# -----------------------------
-*.lnk
-
-# -----------------------------
-# Frontend futuro (caso adaptes para React/Vite)
-# -----------------------------
-node_modules/
+# Frontend build/local artifacts
 frontend/node_modules/
-ui/node_modules/
-dist-ssr/
-.vite/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+frontend/dist/
+frontend/.vite/
 
-# -----------------------------
-# TypeScript / JS build caches
-# -----------------------------
-*.tsbuildinfo
-
-# -----------------------------
-# FastAPI / uvicorn local
-# -----------------------------
-.uvicorn/
-uvicorn.log
-
-# -----------------------------
-# Modelos locais / pesos / embeddings dumps
-# -----------------------------
-models/
-checkpoints/
-weights/
-*.bin
-*.safetensors
-
-# -----------------------------
-# PDFs temporários / downloads incompletos
-# -----------------------------
-*.part
-*.crdownload
-*.download
+# Optional: ignore raw PDFs if not to version large corpus
+# data/raw_docs/*.pdf

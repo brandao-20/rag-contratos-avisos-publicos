@@ -1,70 +1,58 @@
-"""Carregamento de documentos de vários formatos com metadados enriquecidos."""
+"""Carregamento robusto de PDFs/TXT/MD com metadados enriquecidos."""
 
 from __future__ import annotations
 
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any
 
 from langchain.schema import Document
 from pypdf import PdfReader
 
-_MANIFEST_CACHE: Dict[str, Dict[str, str]] | None = None
+from . import config
+from .source_registry import get_source_by_filename
 
 
-def _manifest_path() -> Path:
-    return Path("data/manifests/sources_manifest.csv")
-
-
-def _load_manifest() -> Dict[str, Dict[str, str]]:
-    global _MANIFEST_CACHE
-    if _MANIFEST_CACHE is not None:
-        return _MANIFEST_CACHE
-    manifest = _manifest_path()
-    mapping: Dict[str, Dict[str, str]] = {}
-    if manifest.exists():
-        with manifest.open(encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                filename = (row.get("filename") or "").strip()
-                if filename:
-                    mapping[filename] = {k: (v or "").strip() for k, v in row.items()}
-    _MANIFEST_CACHE = mapping
-    return mapping
-
-
-def _base_metadata(path: Path, *, page: int | None) -> Dict[str, Any]:
-    manifest_row = _load_manifest().get(path.name, {})
-    source_type = path.suffix.lower().lstrip(".")
-    doc_type = manifest_row.get("document_type", "")
-    category = (
-        "contratacao_publica"
-        if ("procedimento" in doc_type.lower() or "contrato" in doc_type.lower())
-        else "aviso_publico"
-    )
+def _base_metadata(path: Path, *, page: int | None) -> dict[str, Any]:
+    source = get_source_by_filename(path.name)
+    source_id = path.stem
+    category = source.category if source else ("contratacao_publica" if source_id.isdigit() and len(source_id) >= 8 else "documento_publico")
     return {
+        "source_id": source.source_id if source else source_id,
         "source_file": path.name,
+        "source_title": source.title if source else path.stem,
         "source_path": str(path),
-        "source_type": source_type,
-        "source_url": manifest_row.get("url") or None,
-        "entity": manifest_row.get("entity") or None,
+        "source_type": path.suffix.lower().lstrip("."),
+        "source_url": source.url if source else None,
+        "entity": source.entity if source else None,
+        "document_type": source.document_type if source else None,
         "category": category,
-        "document_type": doc_type or None,
         "page": page,
+        "locator": f"p.{page}" if page is not None else None,
         "ingested_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
-def load_pdf(path: Path) -> List[Document]:
-    docs: List[Document] = []
+
+def load_pdf(path: Path) -> list[Document]:
+    docs: list[Document] = []
     if not path.exists() or path.stat().st_size == 0:
         return docs
     try:
         reader = PdfReader(str(path))
+        if getattr(reader, "is_encrypted", False):
+            try:
+                reader.decrypt("")
+            except Exception:
+                return docs
     except Exception:
         return docs
-    for page_number, page in enumerate(reader.pages, start=1):
+    try:
+        pages = reader.pages
+    except Exception:
+        return docs
+    for page_number, page in enumerate(pages, start=1):
         try:
             text = page.extract_text() or ""
         except Exception:
@@ -76,16 +64,21 @@ def load_pdf(path: Path) -> List[Document]:
     return docs
 
 
-def load_text_file(path: Path) -> List[Document]:
-    content = path.read_text(encoding="utf-8", errors="ignore")
+
+def load_text_file(path: Path) -> list[Document]:
+    try:
+        content = path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return []
     cleaned = "\n".join(line.rstrip() for line in content.splitlines() if line.strip())
     if not cleaned:
         return []
     return [Document(page_content=cleaned, metadata=_base_metadata(path, page=None))]
 
 
-def load_documents_from_directory(directory: Path) -> List[Document]:
-    all_docs: List[Document] = []
+
+def load_documents_from_directory(directory: Path) -> list[Document]:
+    all_docs: list[Document] = []
     if not directory.exists():
         return all_docs
     for file in sorted(directory.iterdir()):

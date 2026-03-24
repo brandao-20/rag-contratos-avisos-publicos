@@ -1,29 +1,32 @@
-"""Divisão de documentos em blocos menores."""
+"""Chunking com preservação de metadados e IDs estáveis."""
 
 from __future__ import annotations
 
-from typing import Iterable, List
+from typing import Iterable
 
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 
-def chunk_documents(docs: Iterable[Document], *, chunk_size: int, chunk_overlap: int) -> List[Document]:
+
+def chunk_documents(docs: Iterable[Document], *, chunk_size: int, chunk_overlap: int) -> list[Document]:
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", ". ", " "],
+        separators=["\n\n", "\n", ". ", "; ", " ", ""],
     )
-    chunked_docs: List[Document] = []
+    out: list[Document] = []
     for doc in docs:
         splits = splitter.split_text(doc.page_content)
-        for i, chunk in enumerate(splits):
-            metadata = dict(doc.metadata)
-            metadata.update(
+        for idx, chunk in enumerate(splits):
+            meta = dict(doc.metadata)
+            source_id = meta.get("source_id") or meta.get("source_file") or "doc"
+            locator = meta.get("locator") or f"p.{meta.get('page') or 0}"
+            meta.update(
                 {
-                    "chunk_id": i,
-                    "chunk_uid": f"{metadata.get('source_file','')}:p{metadata.get('page') or 0}:c{i}",
+                    "chunk_id": idx,
+                    "chunk_uid": f"{source_id}:{locator}:c{idx}",
                 }
             )
-            chunked_docs.append(Document(page_content=chunk, metadata=metadata))
-    return chunked_docs
+            out.append(Document(page_content=chunk, metadata=meta))
+    return out
