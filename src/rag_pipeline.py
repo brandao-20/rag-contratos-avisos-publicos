@@ -89,7 +89,7 @@ class RAGPipeline:
         start = time.perf_counter()
         retrieval_query, analysis, docs = self.retrieve(query, top_k=top_k, category=category)
         normalized = normalize_chunks(query, docs, analysis.must_terms)
-        context_docs = docs[: max(1, min(len(docs), min(4, top_k or self.top_k)))]
+        context_docs = docs[: max(1, min(len(docs), top_k or self.top_k))]
         context = self._numbered_context(context_docs)
         prompt = PromptTemplate.from_template(QA_PROMPT_TEMPLATE)
         prompt_text = prompt.format(context=context, question=query)

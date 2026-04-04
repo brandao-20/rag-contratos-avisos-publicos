@@ -42,11 +42,16 @@ INTENT_SYNONYMS = {
 
 QUESTION_SUGGESTIONS = [
     "Qual é o objeto deste aviso ou contrato?",
-    "Existe preço base ou valor base?",
+    "Qual é o preço base ou valor base?",
     "Qual é o prazo para apresentação das propostas?",
     "Existe prestação de caução?",
     "Qual é o CPV indicado?",
     "Que critérios de adjudicação são referidos?",
+    "Quem é a entidade adjudicante ou emitente?",
+    "O procedimento tem lotes?",
+    "Qual é o prazo de execução do contrato?",
+    "Que habilitações ou documentos são exigidos?",
+    "Qual é o local de execução do contrato?",
 ]
 
 FOLLOW_UP_BY_INTENT = {

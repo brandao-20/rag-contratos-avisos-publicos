@@ -1,6 +1,13 @@
 #!/bin/bash
-# Script de conveniência para reindexar documentos.
+# Reindexação de documentos
 set -e
+cd "$(dirname "$0")/.."
+
+PYTHON=${PYTHON:-python3}
+if [ -f ".venv/bin/python" ]; then
+  PYTHON=".venv/bin/python"
+fi
+
 echo "A reindexar documentos…"
-python3 "$(dirname "$0")/ingest.py"
+$PYTHON scripts/ingest.py
 echo "Reindexação concluída."

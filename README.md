@@ -1,129 +1,147 @@
 # LLM para análise de contratos/avisos públicos (RAG com citações)
 
-Produto de demonstração para responder, com base documental, a perguntas sobre **contratos e avisos públicos**: objeto, prazos, requisitos, valor/preço base, critérios de adjudicação, entidade adjudicante/emitente, lotes, CPV, caução, local de execução e outros campos relevantes.
+Aplicação de demonstração com **FastAPI + React** para responder, com base documental, a perguntas sobre contratos e avisos públicos portugueses: objeto, prazos, requisitos, valor/preço base, critérios de adjudicação, entidade adjudicante/emitente, lotes, CPV, caução e local de execução.
 
-## Arquitetura final
+As respostas são **ancoradas em fontes** com citações, extração estruturada e prevenção de alucinação.
 
-- **Backend Python (FastAPI)** para ingestão, indexação, retrieval, answer builder, extração estruturada e chats persistentes
-- **Frontend React** para chats, perguntas sugeridas, fontes, campos extraídos, metadados e UX final
+## Arquitetura
 
-A base antiga em Streamlit deixou de ser a interface principal e já não faz parte do fluxo recomendado de arranque.
-
-## Objetivo funcional
-
-- responder em linguagem natural com base no corpus carregado
-- apresentar **citações das fontes**
-- extrair **informação estruturada** quando os campos são explícitos no documento
-- evitar respostas inventadas fora da evidência documental
-- permitir uma demonstração simples, limpa e testável
+```
+api.py                  ← FastAPI: endpoints de saúde, bootstrap, sessões, perguntas
+frontend/               ← React + Vite: UI de chats, fontes, campos, metadados
+src/
+  rag_pipeline.py       ← Pipeline principal (retrieval → answer → confiança)
+  answer_builder.py     ← Extração direta + fallback com citações
+  query_analysis.py     ← Análise de intenção + guardrails + expansão de query
+  extractors.py         ← Extração estruturada determinística (10 campos)
+  source_registry.py    ← Registo de fontes + metadados
+  session_store.py      ← Sessões/chats persistentes em JSON
+  vector_store.py       ← ChromaDB (create / load / query)
+  chunking.py           ← Chunking com metadados estáveis
+  embeddings.py         ← Embeddings via Ollama ou HuggingFace
+  document_loaders.py   ← Carregamento de PDFs/TXT com metadados
+  prompts.py            ← Prompt QA com anti-alucinação
+  config.py             ← Configuração central
+data/raw_docs/          ← Corpus de PDFs públicos
+data/manifests/         ← sources_manifest.csv (metadados de fontes)
+scripts/                ← Ingestão, validação, golden set, arranque
+tests/                  ← Testes unitários + golden set
+```
 
 ## Requisitos
 
-- Python 3.11+
-- Node.js 18+
-- ambiente virtual Python (`.venv`)
+- **Python 3.11+**
+- **Node.js 18+**
+- **Ollama** com modelo de embeddings (`nomic-embed-text`) e LLM opcional (`mistral`)
 
 ## Instalação
 
-### 1) Backend base
+### Backend
 
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+```bash
+python -m venv .venv
+source .venv/bin/activate      # Linux/macOS
+# .venv\Scripts\Activate.ps1  # Windows PowerShell
+
+pip install --upgrade pip
 pip install -r requirements.txt
 pip install -r requirements-api.txt
 ```
 
-### 2) Frontend
+### Frontend
 
-```powershell
+```bash
 cd frontend
 npm install
 cd ..
 ```
 
-## Arranque recomendado
+## Arranque
 
-### Backend API
+### 1. Indexar o corpus (primeira vez ou após adicionar PDFs)
 
-```powershell
-scripts/run_api.bat
+```bash
+python scripts/ingest.py
+# ou:
+bash scripts/reindex.sh        # Linux/macOS
+# scripts\reindex.bat          # Windows
 ```
 
-### Frontend React
+### 2. Arrancar a API FastAPI
 
-```powershell
-scripts/run_frontend.bat
+```bash
+bash scripts/run_api.sh        # Linux/macOS
+# scripts\run_api.bat          # Windows
+# ou diretamente:
+uvicorn api:app --reload
 ```
 
-## Scripts que fazem sentido manter
+### 3. Arrancar o frontend React
 
-- `scripts/ingest.py` — ingestão e indexação do corpus
-- `scripts/reindex.bat` / `scripts/reindex.sh` — atalho para reindexação
-- `scripts/fetch_sources.py` — descarrega PDFs listados no manifesto/urls
-- `scripts/build_manifest.py` — reconstrói `sources_manifest.csv`
-- `scripts/validate_pdfs.py` / `.bat` — valida textualidade/estado dos PDFs
-- `scripts/run_golden.py` / `.bat` — avaliação simples em golden set
-- `scripts/run_api.bat` — arranque local da FastAPI
-- `scripts/run_frontend.bat` — arranque local do frontend React
-- `scripts/clean_local_artifacts.bat` — limpeza local antes de commit/empacotamento
-
-## Scripts/ficheiros que já não fazem sentido manter
-
-- `app.py` — launcher legado de Streamlit
-- `src/ui_helpers.py` — helpers exclusivos do legado Streamlit
-- `scripts/run_app.bat` — launcher do legado Streamlit
-- `scripts/run_stack_notes.txt` — redundante face ao README
-
-## Fluxo mínimo de regressão
-
-Confirmar no mínimo:
-
-1. `GET /health` sem erro crítico
-2. criação/listagem/apagamento de chats
-3. pergunta manual
-4. retrieval + resposta
-5. citações/fontes
-6. extração estruturada
-7. perguntas sugeridas só na última resposta
-8. dark/light mode coerentes
-9. sem sobreposições visuais graves
-
-## Limpeza antes de commit
-
-```powershell
-scripts/clean_local_artifacts.bat
+```bash
+bash scripts/run_frontend.sh   # Linux/macOS
+# scripts\run_frontend.bat     # Windows
 ```
 
-Isto remove artefactos locais como `__pycache__`, `frontend/node_modules`, `frontend/dist`, `.pytest_cache`, `.vite`, `data/app_state/sessions.json` e `tests/golden_report_publicos.json`.
+Frontend em: **http://localhost:5173**
+API em: **http://localhost:8000**
 
-## Estrutura relevante
+## Variáveis de ambiente (opcionais)
 
-```text
-README.md
-api.py
-requirements.txt
-requirements-api.txt
-frontend/
-scripts/
-  ingest.py
-  reindex.bat
-  run_api.bat
-  run_frontend.bat
-  clean_local_artifacts.bat
-src/
-  rag_pipeline.py
-  answer_builder.py
-  query_analysis.py
-  extractors.py
-  source_registry.py
-  vector_store.py
-  embeddings.py
-tests/
-  golden_qa_publicos.json
+| Variável | Valor padrão | Descrição |
+|---|---|---|
+| `EMBEDDING_MODEL` | `nomic-embed-text` | Modelo de embeddings Ollama |
+| `LLM_MODEL` | `mistral` | Modelo LLM Ollama |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | URL do Ollama |
+| `TOP_K` | `4` | Chunks recuperados por pergunta |
+| `CHUNK_SIZE` | `950` | Tamanho do chunk |
+
+## Scripts úteis
+
+| Script | Descrição |
+|---|---|
+| `scripts/ingest.py` | Indexa todos os PDFs em `data/raw_docs/` |
+| `scripts/validate_pdfs.py` | Valida textualidade/estado dos PDFs |
+| `scripts/build_manifest.py` | Reconstrói `sources_manifest.csv` |
+| `scripts/run_golden.py` | Avalia retrieval no golden set |
+| `scripts/fetch_sources.py` | Descarrega PDFs listados no manifesto |
+| `scripts/clean_local_artifacts.bat` | Limpeza antes de commit |
+
+## Testes
+
+```bash
+# Testes unitários (sem Ollama)
+python -m pytest tests/test_router_publicos.py -v
+
+# Testes de ingestão (requer corpus)
+python -m pytest tests/test_ingest.py -v
+
+# Golden set (requer Ollama + índice)
+python scripts/run_golden.py
 ```
+
+## Adicionar documentos ao corpus
+
+1. Copia os PDFs para `data/raw_docs/`
+2. Corre `python scripts/build_manifest.py` (reconstrói o CSV de metadados)
+3. Corre `python scripts/validate_pdfs.py` (verifica textualidade)
+4. Corre `python scripts/ingest.py` (re-indexa tudo)
+
+## Campos extraídos
+
+A aplicação extrai os seguintes campos de forma determinística:
+
+- **Entidade adjudicante** / emitente
+- **Objeto** / designação do contrato
+- **Prazos** (apresentação de propostas + execução)
+- **Valor / preço base**
+- **Critérios de adjudicação**
+- **Caução / garantia**
+- **CPV** (vocabulário principal)
+- **Lotes** (sim/não)
+- **Local de execução**
+- **Habilitações / requisitos**
 
 ## Aviso
 
-Ferramenta de apoio à leitura documental. Confirmar sempre a informação na fonte oficial. Não substitui análise jurídica.
+Ferramenta de apoio à leitura documental. As respostas devem sempre ser confirmadas na fonte oficial. Esta aplicação **não substitui análise jurídica**.
