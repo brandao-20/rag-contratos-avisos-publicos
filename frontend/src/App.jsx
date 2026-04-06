@@ -30,9 +30,7 @@ function App() {
   const [topK, setTopK] = useState(4)
   const [mode, setMode] = usePersistentState('rag-public-mode', 'chat')
   const [theme, setTheme] = usePersistentState('rag-theme', 'light')
-  const [debugMode, setDebugMode] = usePersistentState('rag-debug-mode', false)
   const [favorites, setFavorites] = usePersistentState('rag-favorite-responses', [])
-  const [feedbackMap, setFeedbackMap] = usePersistentState('rag-feedback-map', {})
   const [sidebarSearch, setSidebarSearch] = useState('')
   const [glossarySearch, setGlossarySearch] = useState('')
   const [glossaryCategory, setGlossaryCategory] = useState('todos')
@@ -42,7 +40,7 @@ function App() {
   const [deletingChatId, setDeletingChatId] = useState(null)
   const [copiedAnswerId, setCopiedAnswerId] = useState(null)
   const [error, setError] = useState('')
-  const [showAllSuggestions, setShowAllSuggestions] = useState(false)
+  const [pendingContextSourceId, setPendingContextSourceId] = useState(null)
 
   const composerRef = useRef(null)
   const messageListRef = useRef(null)
@@ -107,6 +105,15 @@ function App() {
     return assistantPayloads.find((item) => item.id === selectedResponseId) || latestPayload
   }, [assistantPayloads, selectedResponseId, latestPayload])
 
+  const getPreferredSourceIdForQuestion = useCallback((question, explicitSourceId = null) => {
+    if (explicitSourceId) return explicitSourceId
+    const normalized = String(question || '').trim().toLowerCase()
+    const deicticTokens = ['neste procedimento', 'neste contrato', 'neste aviso', 'deste procedimento', 'deste contrato', 'deste aviso', 'este procedimento', 'este contrato', 'este aviso']
+    const shouldUseContext = deicticTokens.some((token) => normalized.includes(token))
+    if (!shouldUseContext) return null
+    return selectedPayload?.sources?.[0]?.source_id || latestPayload?.sources?.[0]?.source_id || null
+  }, [latestPayload, selectedPayload])
+
   useEffect(() => {
     if (assistantPayloads.length && !selectedResponseId) {
       setSelectedResponseId(assistantPayloads[assistantPayloads.length - 1].id)
@@ -123,7 +130,7 @@ function App() {
     () => filterPendingSuggestedQuestions(baseSuggestions, askedQuestions),
     [baseSuggestions, askedQuestions],
   )
-  const visibleSuggestions = showAllSuggestions ? pendingSuggestions : pendingSuggestions.slice(0, 6)
+  const visibleSuggestions = pendingSuggestions.slice(0, 6)
   const categories = bootstrap?.categories || FALLBACK_CATEGORIES
   const ragReady = !!bootstrap?.rag_backend_ready
   const ragMode = bootstrap?.rag_backend_mode || 'offline'
@@ -234,21 +241,24 @@ function App() {
     setSendingQuestion(clean)
     setError('')
     try {
+      const preferredSourceId = getPreferredSourceIdForQuestion(clean, pendingContextSourceId)
       const response = await fetchJSON(`/sessions/${targetChatId}/ask`, {
         method: 'POST',
-        body: JSON.stringify({ query: clean, category, top_k: topK }),
+        body: JSON.stringify({ query: clean, category, top_k: topK, preferred_source_id: preferredSourceId || undefined }),
       })
       setActiveChat(response.session)
       setActiveChatId(response.session.id)
       setSelectedResponseId(null)
       setSelectedCitation(null)
       setDraft('')
+      setPendingContextSourceId(null)
       await loadChats(response.session.id)
       setMode('chat')
     } catch (err) {
       setError(normalizeErrorMessage(err))
       await boot()
     } finally {
+      setPendingContextSourceId(null)
       setSending(false)
       setSendingQuestion('')
     }
@@ -266,8 +276,9 @@ function App() {
     }
   }, [handleAsk])
 
-  const handleUseFollowUp = useCallback((question) => {
+  const handleUseFollowUp = useCallback((question, payload) => {
     setDraft(question)
+    setPendingContextSourceId(payload?.sources?.[0]?.source_id || null)
     window.requestAnimationFrame(() => {
       const composer = composerRef.current
       if (composer) {
@@ -303,9 +314,6 @@ function App() {
     })
   }, [activeChat, setFavorites])
 
-  const setFeedback = useCallback((payload, value) => {
-    setFeedbackMap((current) => ({ ...current, [payload.key]: current[payload.key] === value ? null : value }))
-  }, [setFeedbackMap])
 
   const openFavorite = useCallback(async (item) => {
     try {
@@ -313,9 +321,10 @@ function App() {
       setSelectedResponseId(item.responseId)
       setMode('chat')
     } catch (err) {
-      setError(normalizeErrorMessage(err))
+      setFavorites((current) => current.filter((favorite) => favorite.key !== item.key))
+      setError('Este favorito já não existe porque o chat original foi removido. O item foi limpo automaticamente.')
     }
-  }, [loadChat, setMode])
+  }, [loadChat, setFavorites, setMode])
 
   if (loading) {
     return <div className="loading-screen">A carregar a aplicação…</div>
@@ -346,8 +355,6 @@ function App() {
           ragMode={ragMode}
           theme={theme}
           onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
-          debugMode={debugMode}
-          onToggleDebug={() => setDebugMode((current) => !current)}
           onRefresh={boot}
           canExport={!!activeChat?.messages?.length}
           onExportJson={() => exportChatAsJson(activeChat)}
@@ -395,7 +402,6 @@ function App() {
                   const payload = message.role === 'assistant'
                     ? assistantPayloads.find((item) => item.id === assistantIndex?.id)
                     : null
-                  const isLatestAssistantPayload = payload?.id && latestPayload?.id && payload.id === latestPayload.id
 
                   return (
                     <MessageCard
@@ -412,10 +418,8 @@ function App() {
                       copied={payload?.id === copiedAnswerId}
                       onFavorite={() => payload && toggleFavorite(payload)}
                       favorite={payload ? favorites.some((item) => item.key === payload.key) : false}
-                      onFeedback={(value) => payload && setFeedback(payload, value)}
-                      feedback={payload ? feedbackMap[payload.key] : null}
-                      onUseFollowUp={handleUseFollowUp}
-                      showFollowUps={!!isLatestAssistantPayload}
+                      onUseFollowUp={(question) => handleUseFollowUp(question, payload)}
+                      showFollowUps={payload?.id === latestPayload?.id}
                     />
                   )
                 })}
@@ -437,25 +441,6 @@ function App() {
               <div className="empty-panel chat-empty-panel">Cria um chat ou usa uma pergunta sugerida para começar.</div>
             )}
 
-            {selectedPayload?.followUps?.length && activeChat?.messages?.length ? (
-              <section className="suggestions-block">
-                <div className="panel-header panel-header-tight">
-                  <h3>Perguntas sugeridas</h3>
-                  {pendingSuggestions.length > 6 ? (
-                    <button type="button" className="text-button" onClick={() => setShowAllSuggestions((current) => !current)}>
-                      {showAllSuggestions ? 'Ver menos' : 'Ver mais'}
-                    </button>
-                  ) : null}
-                </div>
-                <div className="chip-row">
-                  {visibleSuggestions.map((question) => (
-                    <button key={question} type="button" className="chip" onClick={() => handleAsk(question)} disabled={!canAsk}>
-                      {question}
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ) : null}
 
             <Composer
               draft={draft}
@@ -489,7 +474,7 @@ function App() {
         onChangeTab={setSelectedInspectorTab}
         selectedCitation={selectedCitation}
         onSelectCitation={setSelectedCitation}
-        debugMode={debugMode}
+        debugMode={false}
       />
     </div>
   )

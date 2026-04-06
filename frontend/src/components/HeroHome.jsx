@@ -3,13 +3,11 @@ import React from 'react'
 export default function HeroHome({ suggestions, onAsk, disabled }) {
   return (
     <section className="hero-home panel">
-      <div className="hero-home-icon" aria-hidden="true">◇</div>
-      <h1>Leitura assistida de contratação pública</h1>
+      <h1>Consulta documental de contratação pública</h1>
       <p>
-        Coloca perguntas em linguagem natural sobre objeto, entidade adjudicante, prazos,
-        preço base, critérios, caução, CPV, lotes, local de execução e requisitos. A resposta
-        privilegia extração direta, síntese curta quando o LLM está disponível e citações claras
-        para validação documental.
+        Explora perguntas sobre objeto, entidade adjudicante, prazos, preço base, critérios,
+        caução, CPV, lotes, local de execução e requisitos. O sistema privilegia extração direta,
+        citações claras e fallback documental quando o motor local não está disponível.
       </p>
       <div className="hero-home-suggestions">
         {suggestions.map((question) => (

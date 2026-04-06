@@ -116,13 +116,7 @@ class RAGPipeline:
         )
         structured = self.extract_structured(context_docs)
         elapsed_ms = int((time.perf_counter() - start) * 1000)
-        prioritized_sources = []
-        for idx in package.cited_indexes:
-            if 0 < idx <= len(docs):
-                source_id = (docs[idx - 1].metadata or {}).get("source_id")
-                if source_id and source_id not in prioritized_sources:
-                    prioritized_sources.append(source_id)
-        grouped = group_documents_by_source(docs, prioritized_source_ids=prioritized_sources)
+        grouped = group_documents_by_source(docs)
         return QAResult(
             query=query,
             answer_markdown=package.answer_markdown,

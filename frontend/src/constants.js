@@ -10,16 +10,14 @@ export const FALLBACK_CATEGORIES = [
 ]
 
 export const FALLBACK_SUGGESTIONS = [
-  'Qual é o objeto deste procedimento?',
-  'Existe preço base ou valor base?',
-  'Qual é o prazo para apresentação das propostas?',
-  'Existe prestação de caução?',
-  'Qual é o CPV indicado?',
-  'Que critérios de adjudicação são referidos?',
-  'Quem é a entidade adjudicante?',
-  'O procedimento tem lotes?',
-  'Qual é o local de execução do contrato?',
-  'Que habilitações são exigidas?',
+  'Mostra um procedimento e identifica o objeto.',
+  'Mostra um procedimento com preço base explícito.',
+  'Mostra um procedimento com prazo para apresentação das propostas.',
+  'Mostra um procedimento onde exista prestação de caução.',
+  'Mostra um procedimento e indica o CPV.',
+  'Mostra um procedimento e identifica a entidade adjudicante.',
+  'Mostra um procedimento com lotes.',
+  'Mostra um procedimento e indica o local de execução.',
 ]
 
 export const FALLBACK_BOOTSTRAP = {

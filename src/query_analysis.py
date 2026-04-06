@@ -30,6 +30,42 @@ IRRELEVANT_PATTERNS = (
     "recomenda",
 )
 
+SEARCH_EXAMPLE_PATTERNS = (
+    "procura um procedimento",
+    "mostra um procedimento",
+    "encontra um procedimento",
+    "indica um procedimento",
+    "da-me um procedimento",
+    "dá-me um procedimento",
+    "procura um aviso",
+    "mostra um aviso",
+)
+
+DEICTIC_PATTERNS = (
+    "neste procedimento",
+    "neste contrato",
+    "neste aviso",
+    "deste procedimento",
+    "deste contrato",
+    "deste aviso",
+    "este procedimento",
+    "este contrato",
+    "este aviso",
+)
+
+BROAD_LISTING_PATTERNS = (
+    "que contratos ativos existem",
+    "quais contratos ativos existem",
+    "que contratos existem",
+    "quais contratos existem",
+    "que avisos existem",
+    "quais avisos existem",
+    "lista de contratos",
+    "lista de avisos",
+    "todos os contratos",
+    "todos os avisos",
+)
+
 PROCEDURAL_PATTERNS = (
     "como ",
     "quais os passos",
@@ -51,7 +87,9 @@ class QueryAnalysis:
     answer_mode: str = "grounded"
     reason: str = ""
     is_procedural: bool = False
-
+    is_search_example: bool = False
+    needs_document_context: bool = False
+    is_broad_listing: bool = False
 
 
 def norm(text: str) -> str:
@@ -60,11 +98,9 @@ def norm(text: str) -> str:
     return s.lower().strip()
 
 
-
 def tokenize(text: str) -> list[str]:
     toks = re.findall(r"[a-zA-Zà-ÿ0-9%\.\-/]{2,}", norm(text))
     return [t for t in toks if t not in STOPWORDS]
-
 
 
 def should_force_dont_know(query: str) -> bool:
@@ -72,16 +108,28 @@ def should_force_dont_know(query: str) -> bool:
     return any(term in qn for term in IRRELEVANT_PATTERNS)
 
 
-
 def is_procedural_query(query: str) -> bool:
     qn = norm(query)
     return any(qn.startswith(pattern) or pattern in qn for pattern in PROCEDURAL_PATTERNS)
 
 
+def is_search_example_query(query: str) -> bool:
+    qn = norm(query)
+    return any(qn.startswith(pattern) for pattern in SEARCH_EXAMPLE_PATTERNS)
+
+
+def needs_document_context(query: str) -> bool:
+    qn = norm(query)
+    return any(pattern in qn for pattern in DEICTIC_PATTERNS)
+
+
+def is_broad_listing_query(query: str) -> bool:
+    qn = norm(query)
+    return any(pattern in qn for pattern in BROAD_LISTING_PATTERNS)
+
 
 def _contains_any(text: str, items: Iterable[str]) -> bool:
     return any(norm(i) in text for i in items)
-
 
 
 def classify_intent(query: str) -> str:
@@ -107,7 +155,6 @@ def classify_intent(query: str) -> str:
     if _contains_any(qn, config.INTENT_SYNONYMS["legal"]):
         return "legal"
     return "objeto"
-
 
 
 def analyze_query(query: str) -> QueryAnalysis:
@@ -139,6 +186,9 @@ def analyze_query(query: str) -> QueryAnalysis:
         must_terms = ["designação do contrato", "descrição"]
 
     procedural = is_procedural_query(query)
+    search_example = is_search_example_query(query)
+    contextual = needs_document_context(query)
+    broad_listing = is_broad_listing_query(query)
     answer_mode = "procedural" if procedural else "grounded"
 
     return QueryAnalysis(
@@ -148,8 +198,10 @@ def analyze_query(query: str) -> QueryAnalysis:
         answer_mode=answer_mode,
         reason=f"intent:{intent}",
         is_procedural=procedural,
+        is_search_example=search_example,
+        needs_document_context=contextual,
+        is_broad_listing=broad_listing,
     )
-
 
 
 def augment_query_for_retrieval(query: str, analysis: QueryAnalysis | None = None) -> str:

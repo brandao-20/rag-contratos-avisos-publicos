@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from functools import lru_cache
-import re
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
@@ -92,7 +91,6 @@ class AnswerMetaModel(BaseModel):
     used_llm: bool
     response_mode: str
     llm_label: str | None = None
-    retrieval_backend: str | None = None
 
 
 class ConfidenceModel(BaseModel):
@@ -161,7 +159,6 @@ class AskResponseModel(BaseModel):
     used_llm: bool
     response_mode: str
     llm_label: str | None = None
-    retrieval_backend: str | None = None
 
 
 app = FastAPI(
@@ -287,18 +284,8 @@ def _auto_title_from_query(query: str, *, max_length: int = 72) -> str:
 
 
 
-def _markdown_to_plain_preview(text: str | None) -> str:
-    raw = str(text or "")
-    raw = re.sub(r"^##\s+", "", raw, flags=re.MULTILINE)
-    raw = re.sub(r"\[(\d+)\]", "", raw)
-    raw = raw.replace("**", "").replace("*", "").replace("`", "")
-    raw = re.sub(r"\n+", " ", raw)
-    raw = re.sub(r"\s+", " ", raw).strip()
-    return raw
-
-
 def _safe_preview(text: str | None, *, limit: int = 140) -> str | None:
-    content = _markdown_to_plain_preview(text)
+    content = " ".join((text or "").split()).strip()
     if not content:
         return None
     if len(content) <= limit:
@@ -365,18 +352,13 @@ def _normalize_source_card(raw: dict[str, Any]) -> SourceCardModel:
 def _session_to_summary(session: dict[str, Any]) -> SessionSummaryModel:
     messages = session.get("messages") or []
     last_message = messages[-1] if messages and isinstance(messages[-1], dict) else None
-    preview = None
-    if isinstance(last_message, dict):
-        if last_message.get("role") == "assistant" and isinstance(last_message.get("qa_result"), dict):
-            preview = _safe_preview(((last_message.get("qa_result") or {}).get("answer") or {}).get("markdown"))
-        preview = preview or _safe_preview(last_message.get("content"))
     return SessionSummaryModel(
         id=str(session.get("id") or ""),
         title=str(session.get("title") or "Novo chat"),
         created_at=str(session.get("created_at") or ""),
         updated_at=str(session.get("updated_at") or session.get("created_at") or ""),
         messages_count=len(messages),
-        last_message_preview=preview,
+        last_message_preview=_safe_preview((last_message or {}).get("content")),
     )
 
 
@@ -490,7 +472,7 @@ def bootstrap() -> BootstrapModel:
     rag_backend_ready, rag_backend_error, rag_backend_mode, rag_backend_message = _backend_probe()
     return BootstrapModel(
         api_version=app.version,
-        product_title="Consulta documental de contratos e avisos públicos",
+        product_title="RAG para análise de contratos e avisos públicos",
         question_suggestions=list(config.QUESTION_SUGGESTIONS),
         categories=ALLOWED_CATEGORIES,
         default_category="todos",
@@ -602,7 +584,6 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
                     "used_llm": bool(result.used_llm),
                     "response_mode": response_mode,
                     "llm_label": llm_label,
-                    "retrieval_backend": getattr(result, "retrieval_backend", None),
                 },
                 "sources": [item.model_dump() for item in sources],
                 "structured_data": result.structured_data,
@@ -635,7 +616,6 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
         used_llm=bool(result.used_llm),
         response_mode=response_mode,
         llm_label=llm_label,
-        retrieval_backend=getattr(result, "retrieval_backend", None),
     )
     confidence = ConfidenceModel(
         label=result.confidence_label,
@@ -663,5 +643,4 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
         used_llm=bool(result.used_llm),
         response_mode=response_mode,
         llm_label=llm_label,
-        retrieval_backend=getattr(result, "retrieval_backend", None),
     )

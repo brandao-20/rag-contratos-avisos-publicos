@@ -18,9 +18,7 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "150"))
 TOP_K = int(os.getenv("TOP_K", "4"))
 RETRIEVAL_CANDIDATES = int(os.getenv("RETRIEVAL_CANDIDATES", "18"))
 
-# Por omissão usa-se um modelo HF leve para embeddings, reduzindo drasticamente
-# o tempo de ingestão em CPU. O Ollama continua reservado para síntese/LLM.
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 LLM_MODEL_NAME = os.getenv("LLM_MODEL", "mistral")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_REQUEST_TIMEOUT = int(os.getenv("OLLAMA_REQUEST_TIMEOUT", "120"))

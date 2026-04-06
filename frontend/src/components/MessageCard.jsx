@@ -89,20 +89,6 @@ function ProceduralSteps({ steps }) {
   )
 }
 
-function FavoriteStar({ filled }) {
-  return (
-    <svg viewBox="0 0 24 24" className={classNames('favorite-star-icon', filled && 'favorite-star-icon-filled')} aria-hidden="true">
-      <path
-        d="M12 3.75l2.46 4.99 5.51.8-3.98 3.88.94 5.48L12 16.3l-4.93 2.6.94-5.48-3.98-3.88 5.51-.8L12 3.75z"
-        fill={filled ? 'currentColor' : 'none'}
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
 export default function MessageCard({
   message,
   payload,
@@ -113,6 +99,7 @@ export default function MessageCard({
   onFavorite,
   favorite,
   onUseFollowUp,
+  showFollowUps = false,
 }) {
   const isAssistant = message?.role === 'assistant'
   return (
@@ -143,17 +130,19 @@ export default function MessageCard({
           {isAssistant && payload ? (
             <>
               <ProceduralSteps steps={payload.proceduralSteps} />
-              <FollowUpChips questions={payload.followUps} onUse={onUseFollowUp} />
+              {showFollowUps ? <FollowUpChips questions={payload.followUps} onUse={onUseFollowUp} /> : null}
               <div className="message-actions-row">
                 <button type="button" className="text-button" onClick={onCopy}>{copied ? 'Copiado' : 'Copiar'}</button>
                 <button
                   type="button"
-                  className={classNames('favorite-toggle-button', favorite && 'favorite-toggle-button-active')}
+                  className={classNames('favorite-star-button', favorite && 'favorite-star-button-active')}
                   onClick={onFavorite}
-                  title={favorite ? 'Remover dos guardados' : 'Guardar resposta'}
-                  aria-label={favorite ? 'Remover dos guardados' : 'Guardar resposta'}
+                  title={favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+                  aria-label={favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
                 >
-                  <FavoriteStar filled={favorite} />
+                  <svg viewBox="0 0 24 24" className="favorite-star-icon" aria-hidden="true">
+                    <path d="M12 3.6l2.6 5.26 5.81.84-4.2 4.09.99 5.79L12 16.85 6.8 19.58l.99-5.79-4.2-4.09 5.81-.84L12 3.6z" />
+                  </svg>
                 </button>
               </div>
             </>
