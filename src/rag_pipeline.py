@@ -37,6 +37,8 @@ class QAResult:
     used_llm: bool
     analysis: QueryAnalysis
     retrieval_backend: str = "lexical"
+    primary_source_id: str | None = None
+    primary_source_title: str | None = None
 
 
 class RAGPipeline:
@@ -104,6 +106,41 @@ class RAGPipeline:
     def extract_structured(self, docs: list[Document]) -> dict[str, Any]:
         return extract_structured_from_docs(docs)
 
+    @staticmethod
+    def _pick_primary_source(chunks: list[Any], preferred_source_id: str | None = None) -> tuple[str | None, str | None]:
+        if not chunks:
+            return None, None
+
+        preferred = str(preferred_source_id or '').strip() or None
+        if preferred:
+            for chunk in chunks:
+                source_id = str(chunk.meta.get('source_id') or chunk.meta.get('source_file') or '').strip()
+                if source_id == preferred:
+                    return source_id, str(chunk.meta.get('source_title') or chunk.meta.get('entity') or source_id).strip() or source_id
+
+        aggregate: dict[str, float] = {}
+        labels: dict[str, str] = {}
+        for index, chunk in enumerate(chunks[:12], start=1):
+            source_id = str(chunk.meta.get('source_id') or chunk.meta.get('source_file') or '').strip()
+            if not source_id:
+                continue
+            rank_bonus = max(0.0, 1.3 - (index - 1) * 0.12)
+            aggregate[source_id] = aggregate.get(source_id, 0.0) + float(chunk.blended) + float(chunk.coverage) * 0.18 + rank_bonus
+            labels.setdefault(source_id, str(chunk.meta.get('source_title') or chunk.meta.get('entity') or source_id).strip() or source_id)
+
+        if not aggregate:
+            return None, None
+
+        source_id = max(aggregate.items(), key=lambda item: item[1])[0]
+        return source_id, labels.get(source_id) or source_id
+
+    @staticmethod
+    def _filter_docs_by_source(docs: list[Document], source_id: str | None) -> list[Document]:
+        if not source_id:
+            return docs
+        focused = [doc for doc in docs if str((doc.metadata or {}).get('source_id') or (doc.metadata or {}).get('source_file') or '').strip() == source_id]
+        return focused or docs
+
     def ask(
         self,
         query: str,
@@ -120,7 +157,11 @@ class RAGPipeline:
             preferred_source_id=preferred_source_id,
         )
         normalized = normalize_chunks(query, docs, analysis.must_terms)
-        context_docs = docs[: max(1, min(len(docs), top_k or self.top_k))]
+        primary_source_id, primary_source_title = self._pick_primary_source(normalized, preferred_source_id)
+        focused_docs = self._filter_docs_by_source(docs, primary_source_id)
+        focused_normalized = normalize_chunks(query, focused_docs, analysis.must_terms)
+
+        context_docs = focused_docs[: max(1, min(len(focused_docs), top_k or self.top_k))]
         context = self._numbered_context(context_docs)
         prompt = PromptTemplate.from_template(QA_PROMPT_TEMPLATE)
         prompt_text = prompt.format(context=context, question=query)
@@ -128,7 +169,7 @@ class RAGPipeline:
         package: AnswerPackage = build_grounded_answer(
             query=query,
             analysis=analysis,
-            chunks=normalized,
+            chunks=focused_normalized,
             llm=self.llm,
             prompt_text=prompt_text,
             follow_ups=followups,
@@ -136,11 +177,14 @@ class RAGPipeline:
         )
         structured = self.extract_structured(context_docs)
         elapsed_ms = int((time.perf_counter() - start) * 1000)
-        grouped = group_documents_by_source(docs, prioritized_source_ids=[preferred_source_id] if preferred_source_id else None)
+        grouped = group_documents_by_source(
+            focused_docs,
+            prioritized_source_ids=[primary_source_id] if primary_source_id else None,
+        )
         return QAResult(
             query=query,
             answer_markdown=package.answer_markdown,
-            documents=docs,
+            documents=focused_docs,
             structured_data=structured,
             confidence_label=package.confidence.label,
             confidence_score=package.confidence.score,
@@ -154,6 +198,8 @@ class RAGPipeline:
             used_llm=package.used_llm,
             analysis=analysis,
             retrieval_backend=retrieval_backend,
+            primary_source_id=primary_source_id,
+            primary_source_title=primary_source_title,
         )
 
 

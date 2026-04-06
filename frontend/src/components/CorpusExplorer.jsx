@@ -1,6 +1,7 @@
 import React from 'react'
 
 export default function CorpusExplorer({ sections, onAsk }) {
+  const visibleSections = sections.filter((section) => section?.sources_count || section?.example_questions?.length)
   const totalUniqueSources = sections.find((section) => section.id === 'todos')?.sources_count
     || new Set(
       sections.flatMap((section) => (section.sources || []).map((source) => source.source_id)).filter(Boolean),
@@ -16,7 +17,7 @@ export default function CorpusExplorer({ sections, onAsk }) {
         <span>{totalUniqueSources} fontes únicas</span>
       </div>
       <div className="explorer-grid">
-        {sections.map((section) => (
+        {visibleSections.map((section) => (
           <article key={section.id} className="explorer-card">
             <div className="explorer-card-head">
               <div>
@@ -37,7 +38,7 @@ export default function CorpusExplorer({ sections, onAsk }) {
                 </div>
               </div>
             ) : null}
-            {section.sources?.length ? (
+            {section.id !== 'todos' && section.sources?.length ? (
               <div className="explorer-block">
                 <div className="message-section-label">Fontes</div>
                 <div className="explorer-source-list">
@@ -56,9 +57,7 @@ export default function CorpusExplorer({ sections, onAsk }) {
                   ))}
                 </div>
               </div>
-            ) : (
-              <div className="empty-panel empty-panel-compact">Sem fontes desta categoria no manifesto atual.</div>
-            )}
+            ) : null}
           </article>
         ))}
       </div>

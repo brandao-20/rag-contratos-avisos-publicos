@@ -398,23 +398,25 @@ function App() {
   }, [pushToast])
 
   const toggleFavorite = useCallback((payload) => {
-    if (!activeChat) return
-    let added = false
-    setFavorites((current) => {
-      const exists = current.some((item) => item.key === payload.key)
-      if (exists) return current.filter((item) => item.key !== payload.key)
-      added = true
-      const nextItem = {
-        key: payload.key,
-        responseId: payload.id,
-        sessionId: activeChat.id,
-        chatTitle: activeChat.title,
-        preview: payload.preview,
-      }
-      return [nextItem, ...current].slice(0, 24)
-    })
-    pushToast(added ? 'success' : 'info', added ? 'Resposta guardada' : 'Guardado removido', added ? 'A resposta foi adicionada aos guardados.' : 'A resposta foi removida dos guardados.')
-  }, [activeChat, pushToast, setFavorites])
+    if (!activeChat || !payload?.key) return
+    const exists = favorites.some((item) => item.key === payload.key)
+
+    if (exists) {
+      setFavorites((current) => current.filter((item) => item.key !== payload.key))
+      pushToast('error', 'Guardado removido', 'A resposta foi removida dos guardados locais.')
+      return
+    }
+
+    const nextItem = {
+      key: payload.key,
+      responseId: payload.id,
+      sessionId: activeChat.id,
+      chatTitle: activeChat.title,
+      preview: payload.preview,
+    }
+    setFavorites((current) => [nextItem, ...current.filter((item) => item.key !== payload.key)].slice(0, 24))
+    pushToast('success', 'Resposta guardada', 'A resposta foi adicionada aos guardados locais.')
+  }, [activeChat, favorites, pushToast, setFavorites])
 
   const openFavorite = useCallback(async (item) => {
     try {
@@ -447,7 +449,7 @@ function App() {
           onOpenFavorite={openFavorite}
           onRemoveFavorite={(item) => {
             setFavorites((current) => current.filter((favorite) => favorite.key !== item.key))
-            pushToast('info', 'Guardado removido', 'O item foi removido da lista de guardados.')
+            pushToast('error', 'Guardado removido', 'O item foi removido da lista de guardados.')
           }}
         />
 

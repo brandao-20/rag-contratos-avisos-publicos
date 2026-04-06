@@ -1,14 +1,32 @@
 import React from 'react'
 import { classNames, trimText } from '../utils/format'
 
+function SidebarRemoveButton({ label, onClick, disabled = false }) {
+  return (
+    <button
+      type="button"
+      className="sidebar-remove-button"
+      onClick={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        onClick()
+      }}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+    >
+      <span aria-hidden="true">×</span>
+    </button>
+  )
+}
+
 function FavoriteItem({ item, onOpen, onRemove }) {
   return (
     <div className="favorite-item">
       <button type="button" className="favorite-open-button" onClick={() => onOpen(item)}>
-        <strong>{item.chatTitle || 'Resposta guardada'}</strong>
-        <span>{item.preview}</span>
+        <span className="favorite-item-title">{item.chatTitle || 'Resposta guardada'}</span>
       </button>
-      <button type="button" className="icon-button small-icon-button" onClick={() => onRemove(item)} title="Remover favorito">×</button>
+      <SidebarRemoveButton label="Remover guardado" onClick={() => onRemove(item)} />
     </div>
   )
 }
@@ -19,15 +37,7 @@ function ChatItem({ chat, active, deleting, onSelect, onDelete }) {
       <button className={classNames('chat-item chat-item-compact', active && 'chat-item-active')} onClick={() => onSelect(chat.id)} title={chat.title || 'Novo chat'}>
         <div className="chat-item-title">{chat.title || 'Novo chat'}</div>
       </button>
-      <button
-        type="button"
-        className="chat-delete-hitbox"
-        onClick={(event) => { event.stopPropagation(); onDelete(chat.id) }}
-        disabled={deleting}
-        title="Apagar chat"
-      >
-        ×
-      </button>
+      <SidebarRemoveButton label="Apagar chat" onClick={() => onDelete(chat.id)} disabled={deleting} />
     </div>
   )
 }

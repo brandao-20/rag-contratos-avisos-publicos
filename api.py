@@ -5,20 +5,21 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any, Literal
 
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from src import config
 from src.catalog import build_corpus_overview, get_glossary_entries
+from src.query_analysis import analyze_query
 from src.session_store import create_session, delete_session, get_session, list_sessions, upsert_session
+from src.source_registry import load_source_registry
 
 
 ALLOWED_CATEGORIES = [
     {"id": "todos", "label": "Todos os documentos"},
     {"id": "contratacao_publica", "label": "Contratação pública"},
-    {"id": "aviso_publico", "label": "Avisos públicos"},
-    {"id": "documento_publico", "label": "Outros documentos públicos"},
 ]
 
 
@@ -33,7 +34,8 @@ class SessionUpdateRequest(BaseModel):
 class AskRequest(BaseModel):
     query: str = Field(min_length=3, max_length=4000)
     top_k: int | None = Field(default=None, ge=1, le=12)
-    category: Literal["todos", "contratacao_publica", "aviso_publico", "documento_publico"] = "todos"
+    category: Literal["todos", "contratacao_publica"] = "todos"
+    preferred_source_id: str | None = Field(default=None, max_length=120)
 
 
 class SessionMessageModel(BaseModel):
@@ -91,6 +93,9 @@ class AnswerMetaModel(BaseModel):
     used_llm: bool
     response_mode: str
     llm_label: str | None = None
+    retrieval_backend: str | None = None
+    primary_source_id: str | None = None
+    primary_source_title: str | None = None
 
 
 class ConfidenceModel(BaseModel):
@@ -159,6 +164,9 @@ class AskResponseModel(BaseModel):
     used_llm: bool
     response_mode: str
     llm_label: str | None = None
+    retrieval_backend: str | None = None
+    primary_source_id: str | None = None
+    primary_source_title: str | None = None
 
 
 app = FastAPI(
@@ -392,6 +400,171 @@ def _normalize_question_key(value: str) -> str:
     return " ".join((value or "").lower().replace("?", " ").split())
 
 
+FIELD_QUERY_PREFIXES = (
+    "qual ",
+    "quais ",
+    "quem ",
+    "onde ",
+    "quando ",
+    "existe ",
+    "há ",
+    "ha ",
+    "tem ",
+    "indica ",
+    "diz ",
+    "mostra ",
+    "o procedimento ",
+)
+
+
+def _query_scope_aliases() -> tuple[str, ...]:
+    aliases: set[str] = set()
+    prefixes = [
+        "município de ",
+        "municipio de ",
+        "município do ",
+        "municipio do ",
+        "unidade local de saúde de ",
+        "unidade local de saude de ",
+        "unidade local de saúde do ",
+        "unidade local de saude do ",
+        "serviços de ação social da ",
+        "servicos de acao social da ",
+        "universidade do ",
+        "universidade de ",
+    ]
+    for record in load_source_registry().values():
+        for raw in (record.entity, record.title):
+            label = _normalize_question_key(str(raw or ""))
+            if not label or len(label) < 4:
+                continue
+            aliases.add(label)
+            for prefix in prefixes:
+                if label.startswith(prefix):
+                    tail = label[len(prefix):].strip()
+                    if tail and len(tail) >= 3:
+                        aliases.add(tail)
+    return tuple(sorted(aliases, key=len, reverse=True))
+
+
+def _query_mentions_specific_scope(query: str) -> bool:
+    normalized = _normalize_question_key(query)
+    if not normalized:
+        return False
+    return any(alias in normalized for alias in _query_scope_aliases())
+
+
+def _looks_like_contextual_follow_up(query: str) -> bool:
+    normalized = _normalize_question_key(query)
+    if not normalized:
+        return False
+    analysis = analyze_query(query)
+    if analysis.is_search_example or analysis.is_broad_listing:
+        return False
+    if _query_mentions_specific_scope(query):
+        return False
+    if analysis.needs_document_context:
+        return True
+    if any(normalized.startswith(prefix) for prefix in FIELD_QUERY_PREFIXES):
+        return True
+    return len(normalized.split()) <= 8
+
+
+def _should_clear_document_context(query: str) -> bool:
+    normalized = _normalize_question_key(query)
+    if not normalized:
+        return False
+    switch_markers = ("outro procedimento", "outra fonte", "noutro procedimento", "novo procedimento")
+    if any(marker in normalized for marker in switch_markers):
+        return True
+    return analyze_query(query).is_search_example and not _looks_like_contextual_follow_up(query)
+
+
+def _get_session_active_source(session: dict[str, Any]) -> tuple[str | None, str | None]:
+    source_id = str(session.get("active_source_id") or "").strip() or None
+    source_title = str(session.get("active_source_title") or "").strip() or None
+    return source_id, source_title
+
+
+def _resolve_preferred_source_id(session: dict[str, Any], query: str, payload_source_id: str | None = None) -> str | None:
+    explicit = str(payload_source_id or "").strip() or None
+    if explicit:
+        return explicit
+    if _should_clear_document_context(query):
+        return None
+    active_source_id, _ = _get_session_active_source(session)
+    if active_source_id and _looks_like_contextual_follow_up(query):
+        return active_source_id
+    return None
+
+
+def _build_need_context_payload(session: dict[str, Any], query: str) -> tuple[dict[str, Any], AnswerMetaModel, ConfidenceModel, list[SourceCardModel], list[str], list[str]]:
+    markdown = (
+        "## Resposta\n"
+        "Preciso de um procedimento concreto para responder sem saltar entre documentos.\n\n"
+        "## Detalhes\n"
+        "- Indica uma entidade, município ou procedimento específico.\n"
+        "- Em alternativa, usa uma pergunta de procura como as sugestões da home.\n\n"
+        "## Fontes usadas\n"
+        "Sem fontes, porque ainda não foi fixado um procedimento ativo."
+    )
+    confidence = ConfidenceModel(
+        label="baixa",
+        score=0.0,
+        reasons=["A pergunta é contextual, mas ainda não existe um procedimento ativo na conversa."],
+    )
+    answer = AnswerMetaModel(
+        markdown=markdown,
+        intent=analyze_query(query).intent,
+        retrieval_query=query,
+        elapsed_ms=0,
+        citations_count=0,
+        used_llm=False,
+        response_mode="heuristic",
+        llm_label=None,
+        retrieval_backend=None,
+        primary_source_id=None,
+        primary_source_title=None,
+    )
+    follow_up_questions = list(config.QUESTION_SUGGESTIONS[:4])
+    procedural_steps: list[str] = []
+
+    session.setdefault("messages", [])
+    session["messages"].append({"role": "user", "content": query})
+    session["messages"].append(
+        {
+            "role": "assistant",
+            "content": markdown,
+            "qa_result": {
+                "confidence": confidence.model_dump(),
+                "answer": answer.model_dump(),
+                "sources": [],
+                "structured_data": {},
+                "follow_up_questions": follow_up_questions,
+                "procedural_steps": procedural_steps,
+                "confidence_label": confidence.label,
+                "confidence_score": confidence.score,
+                "confidence_reasons": confidence.reasons,
+                "elapsed_ms": 0,
+                "citations_count": 0,
+                "sources_grouped": [],
+                "intent": answer.intent,
+                "retrieval_query": answer.retrieval_query,
+                "used_llm": False,
+                "response_mode": answer.response_mode,
+                "llm_label": None,
+                "retrieval_backend": None,
+                "primary_source_id": None,
+                "primary_source_title": None,
+            },
+        }
+    )
+    if _is_default_session_title(session.get("title")):
+        session["title"] = _auto_title_from_query(query)
+    persisted = upsert_session(session)
+    return persisted, answer, confidence, [], follow_up_questions, procedural_steps
+
+
 
 def _dedupe_follow_up_questions(questions: list[Any], current_query: str) -> list[str]:
     seen = {_normalize_question_key(current_query)}
@@ -543,9 +716,42 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
     if not session:
         raise HTTPException(status_code=404, detail="Chat não encontrado.")
 
+    preferred_source_id = _resolve_preferred_source_id(session, payload.query, payload.preferred_source_id)
+    if _looks_like_contextual_follow_up(payload.query) and not preferred_source_id and not _query_mentions_specific_scope(payload.query):
+        session, answer, confidence, sources, follow_up_questions, procedural_steps = _build_need_context_payload(session, payload.query)
+        return AskResponseModel(
+            session=_session_to_detail(session),
+            answer=answer,
+            confidence=confidence,
+            sources=sources,
+            structured_data={},
+            follow_up_questions=follow_up_questions,
+            procedural_steps=procedural_steps,
+            answer_markdown=answer.markdown,
+            confidence_label=confidence.label,
+            confidence_score=confidence.score,
+            confidence_reasons=confidence.reasons,
+            elapsed_ms=answer.elapsed_ms,
+            citations_count=answer.citations_count,
+            sources_grouped=sources,
+            retrieval_query=answer.retrieval_query,
+            intent=answer.intent,
+            used_llm=answer.used_llm,
+            response_mode=answer.response_mode,
+            llm_label=answer.llm_label,
+            retrieval_backend=answer.retrieval_backend,
+            primary_source_id=answer.primary_source_id,
+            primary_source_title=answer.primary_source_title,
+        )
+
     try:
         pipeline = _load_pipeline()
-        result = pipeline.ask(payload.query, top_k=payload.top_k, category=payload.category)
+        result = pipeline.ask(
+            payload.query,
+            top_k=payload.top_k,
+            category=payload.category,
+            preferred_source_id=preferred_source_id,
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -563,6 +769,34 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
     llm_label = _derive_llm_label(result)
     procedural_steps = [str(step).strip() for step in getattr(result, "procedural_steps", []) or [] if str(step).strip()]
 
+    primary_source_id = str(getattr(result, "primary_source_id", "") or "").strip() or None
+    primary_source_title = str(getattr(result, "primary_source_title", "") or "").strip() or None
+    if primary_source_id:
+        session["active_source_id"] = primary_source_id
+        session["active_source_title"] = primary_source_title
+    elif _should_clear_document_context(payload.query):
+        session.pop("active_source_id", None)
+        session.pop("active_source_title", None)
+
+    answer = AnswerMetaModel(
+        markdown=result.answer_markdown,
+        intent=result.analysis.intent,
+        retrieval_query=result.retrieval_query,
+        elapsed_ms=result.elapsed_ms,
+        citations_count=result.citations_count,
+        used_llm=bool(result.used_llm),
+        response_mode=response_mode,
+        llm_label=llm_label,
+        retrieval_backend=getattr(result, "retrieval_backend", None),
+        primary_source_id=primary_source_id,
+        primary_source_title=primary_source_title,
+    )
+    confidence = ConfidenceModel(
+        label=result.confidence_label,
+        score=result.confidence_score,
+        reasons=result.confidence_reasons,
+    )
+
     session.setdefault("messages", [])
     session["messages"].append({"role": "user", "content": payload.query})
     session["messages"].append(
@@ -570,21 +804,8 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
             "role": "assistant",
             "content": result.answer_markdown,
             "qa_result": {
-                "confidence": {
-                    "label": result.confidence_label,
-                    "score": result.confidence_score,
-                    "reasons": result.confidence_reasons,
-                },
-                "answer": {
-                    "markdown": result.answer_markdown,
-                    "intent": result.analysis.intent,
-                    "retrieval_query": result.retrieval_query,
-                    "elapsed_ms": result.elapsed_ms,
-                    "citations_count": result.citations_count,
-                    "used_llm": bool(result.used_llm),
-                    "response_mode": response_mode,
-                    "llm_label": llm_label,
-                },
+                "confidence": confidence.model_dump(),
+                "answer": answer.model_dump(),
                 "sources": [item.model_dump() for item in sources],
                 "structured_data": result.structured_data,
                 "follow_up_questions": follow_up_questions,
@@ -600,28 +821,15 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
                 "used_llm": bool(result.used_llm),
                 "response_mode": response_mode,
                 "llm_label": llm_label,
+                "retrieval_backend": getattr(result, "retrieval_backend", None),
+                "primary_source_id": primary_source_id,
+                "primary_source_title": primary_source_title,
             },
         }
     )
     if _is_default_session_title(session.get("title")):
         session["title"] = _auto_title_from_query(payload.query)
     session = upsert_session(session)
-
-    answer = AnswerMetaModel(
-        markdown=result.answer_markdown,
-        intent=result.analysis.intent,
-        retrieval_query=result.retrieval_query,
-        elapsed_ms=result.elapsed_ms,
-        citations_count=result.citations_count,
-        used_llm=bool(result.used_llm),
-        response_mode=response_mode,
-        llm_label=llm_label,
-    )
-    confidence = ConfidenceModel(
-        label=result.confidence_label,
-        score=result.confidence_score,
-        reasons=result.confidence_reasons,
-    )
 
     return AskResponseModel(
         session=_session_to_detail(session),
@@ -643,4 +851,7 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
         used_llm=bool(result.used_llm),
         response_mode=response_mode,
         llm_label=llm_label,
+        retrieval_backend=getattr(result, "retrieval_backend", None),
+        primary_source_id=primary_source_id,
+        primary_source_title=primary_source_title,
     )

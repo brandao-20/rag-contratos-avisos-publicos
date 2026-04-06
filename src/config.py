@@ -44,10 +44,11 @@ INTENT_SYNONYMS = {
 QUESTION_SUGGESTIONS = [
     "Procura um procedimento do Município de Amares e identifica o objeto.",
     "Procura um procedimento do Município de Braga com preço base explícito.",
-    "Procura um procedimento de Arcos de Valdevez e verifica se tem lotes.",
+    "Mostra um procedimento de Arcos de Valdevez e verifica se tem lotes.",
     "Procura um procedimento de Viana do Castelo e indica o prazo de apresentação.",
     "Mostra um procedimento da zona do Minho onde exista prestação de caução.",
-    "Procura um procedimento e identifica a entidade adjudicante.",
+    "Procura um procedimento do Minho com entidade adjudicante identificada.",
+    "Mostra um procedimento com CPV explícito e preço base identificado.",
 ]
 
 FOLLOW_UP_BY_INTENT = {

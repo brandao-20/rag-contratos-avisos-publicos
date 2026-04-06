@@ -17,12 +17,13 @@ A resposta é sempre apresentada com **fontes agrupadas, citações, confiança 
 
 ## Principais melhorias desta versão
 
-- UI reorganizada em **sidebar + conversa + inspeção** com home mais limpa.
-- **Pesquisa de chats**, favoritos locais, exportação de conversa e feedback discreto.
+- UI reorganizada em **sidebar + conversa + inspeção** com home mais limpa e perguntas de arranque mais robustas.
+- **Pesquisa de chats**, exportação de conversa, toasts e popup próprio de eliminação.
 - Modos dedicados para **Conversar**, **Explorar corpus** e **Glossário**.
-- **Inspeção de citação** no painel direito.
-- Respostas procedimentais com **passos sugeridos** quando a pergunta o justifica.
-- Endpoints adicionais para **exploração do corpus** e **glossário**.
+- **Inspeção de citação** e metadados com indicação da **fonte principal** e do backend de retrieval.
+- **Persistência de contexto documental**: perguntas curtas de seguimento mantêm o mesmo procedimento em foco.
+- **Respostas procedimentais com passos sugeridos** quando a pergunta o justifica.
+- **Corpus do Minho reforçado e mais coerente**, incluindo novas fontes de Braga, Monção, Universidade do Minho, SASUM e Arcos de Valdevez.
 - Backend mantido em **FastAPI + motor RAG Python**, sem regressar a Streamlit.
 
 ## Arquitetura
@@ -140,7 +141,7 @@ python -m pytest tests/test_ingest.py -v
 3. Mostrar a inspeção da resposta: **fontes**, **campos** e **metadados**.
 4. Abrir a vista **Explorar corpus**.
 5. Abrir o **Glossário**.
-6. Mostrar exportação do chat e favoritos locais.
+6. Mostrar exportação do chat e continuidade do mesmo procedimento em perguntas de seguimento.
 
 ## Limites conhecidos
 

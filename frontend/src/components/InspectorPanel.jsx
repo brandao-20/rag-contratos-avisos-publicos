@@ -1,6 +1,6 @@
 import React from 'react'
 import { STRUCTURED_LABELS } from '../constants'
-import { classNames, renderStructuredValue, trimText } from '../utils/format'
+import { classNames, renderStructuredValue } from '../utils/format'
 import SourceCard from './SourceCard'
 
 function ConfidenceBadge({ confidence }) {
@@ -62,6 +62,7 @@ function MetadataPanel({ payload, debugMode }) {
         <div className="meta-item"><div className="meta-label">Tempo</div><div className="meta-value">{answer.elapsed_ms ? `${answer.elapsed_ms} ms` : '—'}</div></div>
         <div className="meta-item"><div className="meta-label">Modo de resposta</div><div className="meta-value">{answer.response_mode === 'llm' ? (answer.llm_label || 'LLM') : 'Extração direta'}</div></div>
         <div className="meta-item"><div className="meta-label">Retrieval</div><div className="meta-value">{retrievalBackend}</div></div>
+        <div className="meta-item meta-item-wide"><div className="meta-label">Fonte principal</div><div className="meta-value">{answer.primary_source_title || answer.primary_source_id || '—'}</div></div>
       </div>
       <div className="meta-card">
         <div className="meta-label">Confiança</div>

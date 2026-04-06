@@ -136,7 +136,11 @@ export default function MessageCard({
                 <button
                   type="button"
                   className={classNames('favorite-star-button', favorite && 'favorite-star-button-active')}
-                  onClick={onFavorite}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    onFavorite?.()
+                  }}
                   title={favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
                   aria-label={favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
                 >

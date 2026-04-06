@@ -6,9 +6,9 @@ em vistas úteis para demonstração e navegação da UI.
 
 from __future__ import annotations
 
-from collections import defaultdict
+
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Iterable
 
 from .source_registry import SourceRecord, load_source_registry
 
@@ -21,39 +21,6 @@ class GlossaryEntry:
     why_it_matters: str
     related_terms: tuple[str, ...] = ()
 
-
-_THEME_BLUEPRINTS = [
-    {
-        "id": "contratacao_publica",
-        "label": "Contratação pública",
-        "description": "Peças e anúncios de procedimento de contratação pública, curados para a zona do Minho e centrados em objeto, prazo, preço base, critérios, caução, CPV, lotes e entidade adjudicante.",
-        "example_questions": [
-            "Qual é o objeto do procedimento?",
-            "Existe preço base ou orçamento?",
-            "Há divisão em lotes?",
-        ],
-    },
-    {
-        "id": "aviso_publico",
-        "label": "Avisos públicos",
-        "description": "Avisos publicados e respetivos elementos formais, como prazos, entidade emitente e enquadramento do procedimento.",
-        "example_questions": [
-            "Qual é o prazo para apresentação das propostas?",
-            "Quem é a entidade adjudicante?",
-            "Que CPV é indicado?",
-        ],
-    },
-    {
-        "id": "documento_publico",
-        "label": "Outros documentos públicos",
-        "description": "Documentação complementar ou peças de apoio presentes no corpus local da demonstração.",
-        "example_questions": [
-            "Que requisitos ou habilitações são exigidos?",
-            "Existe prestação de caução?",
-            "Qual é o local de execução?",
-        ],
-    },
-]
 
 _GLOSSARY: tuple[GlossaryEntry, ...] = (
     GlossaryEntry(
@@ -154,48 +121,69 @@ def _source_preview(source: SourceRecord) -> dict[str, Any]:
     }
 
 
+def _sorted_sources(items: Iterable[SourceRecord]) -> list[SourceRecord]:
+    return sorted(items, key=lambda item: ((item.entity or ""), item.title.lower()))
+
 
 def build_corpus_overview() -> list[dict[str, Any]]:
     registry = list(load_source_registry().values())
-    by_category: dict[str, list[SourceRecord]] = defaultdict(list)
-    for source in registry:
-        by_category[source.category].append(source)
+    if not registry:
+        return []
 
-    sections: list[dict[str, Any]] = []
-    for blueprint in _THEME_BLUEPRINTS:
-        sources = sorted(
-            by_category.get(blueprint["id"], []),
-            key=lambda item: ((item.entity or ""), item.title.lower()),
-        )
+    municipalities = [
+        source for source in registry
+        if (source.entity or "").lower().startswith(("município", "municipio"))
+    ]
+    institutions = [source for source in registry if source not in municipalities]
+
+    sections: list[dict[str, Any]] = [
+        {
+            "id": "todos",
+            "label": "Corpus regional do Minho",
+            "description": "Conjunto curado de anúncios de procedimento focado no Minho, preparado para reduzir saltos semânticos e manter as respostas ancoradas num procedimento concreto.",
+            "sources_count": len(registry),
+            "example_questions": [
+                "Procura um procedimento do Município de Braga com preço base explícito.",
+                "Mostra um procedimento do Minho onde exista prestação de caução.",
+                "Mostra um procedimento com CPV explícito e preço base identificado.",
+            ],
+            "sources": [],
+        }
+    ]
+
+    if municipalities:
         sections.append(
             {
-                "id": blueprint["id"],
-                "label": blueprint["label"],
-                "description": blueprint["description"],
-                "sources_count": len(sources),
-                "example_questions": list(blueprint["example_questions"]),
-                "sources": [_source_preview(source) for source in sources[:8]],
+                "id": "municipios",
+                "label": "Municípios do Minho",
+                "description": "Procedimentos emitidos por municípios da região, úteis para perguntas sobre objeto, preço base, prazo, lotes, local e critérios.",
+                "sources_count": len(municipalities),
+                "example_questions": [
+                    "Procura um procedimento do Município de Amares e identifica o objeto.",
+                    "Mostra um procedimento de Arcos de Valdevez e verifica se tem lotes.",
+                    "Procura um procedimento de Viana do Castelo e indica o prazo de apresentação.",
+                ],
+                "sources": [_source_preview(source) for source in _sorted_sources(municipalities)[:10]],
             }
         )
 
-    if registry:
-        sections.insert(
-            0,
+    if institutions:
+        sections.append(
             {
-                "id": "todos",
-                "label": "Corpus completo",
-                "description": "Vista agregada do corpus regional do Minho disponível para a demonstração, sem alterar ou inventar fontes.",
-                "sources_count": len(registry),
+                "id": "saude_ensino",
+                "label": "Saúde e ensino públicos",
+                "description": "Fontes da Universidade do Minho, SASUM e unidades locais de saúde, úteis para demonstrar casos com lotes, CPV, preço base e critérios multifator.",
+                "sources_count": len(institutions),
                 "example_questions": [
-                    "Qual é a entidade adjudicante deste procedimento?",
-                    "Existe preço base ou valor de referência?",
-                    "Que requisitos e documentos são mencionados?",
+                    "Procura um procedimento da Universidade do Minho com preço base explícito.",
+                    "Mostra um procedimento da ULS Braga e identifica o prazo de apresentação.",
+                    "Procura um procedimento do ensino superior com lotes explícitos.",
                 ],
-                "sources": [_source_preview(source) for source in sorted(registry, key=lambda item: item.title.lower())[:10]],
-            },
+                "sources": [_source_preview(source) for source in _sorted_sources(institutions)[:10]],
+            }
         )
-    return sections
 
+    return sections
 
 
 def get_glossary_entries() -> list[dict[str, Any]]:
