@@ -11,7 +11,7 @@ from langchain.schema import Document
 from pypdf import PdfReader
 
 from . import config
-from .source_registry import get_source_by_filename
+from .source_registry import get_source_by_filename, load_source_registry
 
 
 def _base_metadata(path: Path, *, page: int | None) -> dict[str, Any]:
@@ -77,11 +77,27 @@ def load_text_file(path: Path) -> list[Document]:
 
 
 
+def _allowed_filenames_from_manifest() -> set[str] | None:
+    registry = load_source_registry()
+    if not registry:
+        return None
+    filenames = {record.filename for record in registry.values() if record.filename}
+    return filenames or None
+
+
+
 def load_documents_from_directory(directory: Path) -> list[Document]:
     all_docs: list[Document] = []
     if not directory.exists():
         return all_docs
-    for file in sorted(directory.iterdir()):
+
+    allowed_filenames = _allowed_filenames_from_manifest()
+    if allowed_filenames is not None:
+        files = [directory / name for name in sorted(allowed_filenames) if (directory / name).exists()]
+    else:
+        files = sorted(directory.iterdir())
+
+    for file in files:
         if file.is_dir():
             continue
         ext = file.suffix.lower()

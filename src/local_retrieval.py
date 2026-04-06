@@ -61,6 +61,7 @@ def lexical_search(
     *,
     k: int,
     category: str | None = None,
+    preferred_source_id: str | None = None,
 ) -> list[Document]:
     tokens = [tok for tok in tokenize(query) if len(tok) >= 3]
     must_terms = [_norm(item) for item in analysis.must_terms if item]
@@ -72,6 +73,8 @@ def lexical_search(
     for doc in load_local_chunks():
         meta = dict(getattr(doc, "metadata", {}) or {})
         if category and category != "todos" and meta.get("category") != category:
+            continue
+        if preferred_source_id and str(meta.get("source_id") or "") != str(preferred_source_id):
             continue
 
         haystack = _haystack(doc)

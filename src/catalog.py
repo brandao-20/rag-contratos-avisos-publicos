@@ -26,7 +26,7 @@ _THEME_BLUEPRINTS = [
     {
         "id": "contratacao_publica",
         "label": "Contratação pública",
-        "description": "Peças, anúncios e documentos ligados ao procedimento, ao objeto e às condições-base do contrato.",
+        "description": "Peças e anúncios de procedimento de contratação pública, curados para a zona do Minho e centrados em objeto, prazo, preço base, critérios, caução, CPV, lotes e entidade adjudicante.",
         "example_questions": [
             "Qual é o objeto do procedimento?",
             "Existe preço base ou orçamento?",
@@ -184,7 +184,7 @@ def build_corpus_overview() -> list[dict[str, Any]]:
             {
                 "id": "todos",
                 "label": "Corpus completo",
-                "description": "Vista agregada do corpus local disponível para a demonstração, sem alterar ou inventar fontes.",
+                "description": "Vista agregada do corpus regional do Minho disponível para a demonstração, sem alterar ou inventar fontes.",
                 "sources_count": len(registry),
                 "example_questions": [
                     "Qual é a entidade adjudicante deste procedimento?",

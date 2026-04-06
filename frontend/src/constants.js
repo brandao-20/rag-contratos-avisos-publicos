@@ -10,14 +10,12 @@ export const FALLBACK_CATEGORIES = [
 ]
 
 export const FALLBACK_SUGGESTIONS = [
-  'Mostra um procedimento e identifica o objeto.',
-  'Mostra um procedimento com preço base explícito.',
-  'Mostra um procedimento com prazo para apresentação das propostas.',
-  'Mostra um procedimento onde exista prestação de caução.',
-  'Mostra um procedimento e indica o CPV.',
-  'Mostra um procedimento e identifica a entidade adjudicante.',
-  'Mostra um procedimento com lotes.',
-  'Mostra um procedimento e indica o local de execução.',
+  'Procura um procedimento do Município de Amares e identifica o objeto.',
+  'Procura um procedimento do Município de Braga com preço base explícito.',
+  'Procura um procedimento de Arcos de Valdevez e verifica se tem lotes.',
+  'Procura um procedimento de Viana do Castelo e indica o prazo de apresentação.',
+  'Mostra um procedimento da zona do Minho onde exista prestação de caução.',
+  'Procura um procedimento e identifica a entidade adjudicante.',
 ]
 
 export const FALLBACK_BOOTSTRAP = {

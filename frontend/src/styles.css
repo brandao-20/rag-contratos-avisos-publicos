@@ -249,40 +249,41 @@ textarea,
 
 .small-icon-button { width: 30px; height: 30px; font-size: 0.9rem; }
 .favorite-star-button {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--panel-strong) 96%, transparent);
-  color: var(--muted);
-  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  background: transparent;
+  color: var(--accent);
+  opacity: 0.9;
+  padding: 0;
+  transition: transform 0.15s ease, opacity 0.15s ease, color 0.15s ease;
 }
 .favorite-star-button:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
-  color: var(--accent);
+  opacity: 1;
+  color: var(--accent-strong);
 }
 .favorite-star-button-active {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
-  background: color-mix(in srgb, var(--accent) 14%, var(--panel-strong));
   color: var(--accent);
+  opacity: 1;
 }
 .favorite-star-icon {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   display: block;
 }
 .favorite-star-icon path {
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.8;
+  stroke-width: 1.9;
   stroke-linejoin: round;
 }
 .favorite-star-button-active .favorite-star-icon path {
-  fill: currentColor;
+  fill: color-mix(in srgb, var(--accent) 22%, white);
 }
 .favorite-inline-star {
   display: inline-flex;
@@ -656,3 +657,88 @@ textarea {
 .mode-chip:hover, .button:hover, .chat-item:hover, .favorite-open-button:hover, .chip:hover, .tab-button:hover, .icon-button:hover { border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); }
 .chat-item-active .chat-item-badge { background: rgba(255,255,255,0.18); color: #f7fffd; border-color: transparent; }
 .message-actions-row .text-button { margin-right: 4px; }
+
+
+.toast-stack {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 24px));
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  background: var(--panel-strong);
+}
+.toast-success { border-color: color-mix(in srgb, var(--success) 42%, var(--border)); }
+.toast-error { border-color: color-mix(in srgb, var(--danger) 42%, var(--border)); }
+.toast-info { border-color: color-mix(in srgb, var(--info) 40%, var(--border)); }
+.toast-title { font-weight: 700; }
+.toast-message { color: var(--muted); font-size: 0.92rem; margin-top: 2px; }
+.toast-close {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  padding: 0;
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(10, 18, 16, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+.confirm-dialog {
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: calc(var(--radius-lg) - 2px);
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+.confirm-content h3 { margin: 0 0 4px; }
+.confirm-content p { margin: 0; color: var(--muted); line-height: 1.55; }
+.confirm-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-weight: 800;
+}
+.confirm-danger .confirm-icon {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+.confirm-success .confirm-icon {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.button-danger {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--danger) 72%, var(--panel-strong)), color-mix(in srgb, var(--danger) 56%, var(--panel)));
+  color: white;
+  border-color: color-mix(in srgb, var(--danger) 52%, var(--border));
+}

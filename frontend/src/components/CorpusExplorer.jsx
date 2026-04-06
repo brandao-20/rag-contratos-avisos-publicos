@@ -1,9 +1,10 @@
 import React from 'react'
 
 export default function CorpusExplorer({ sections, onAsk }) {
-  const totalUniqueSources = new Set(
-    sections.flatMap((section) => (section.sources || []).map((source) => source.source_id)).filter(Boolean),
-  ).size
+  const totalUniqueSources = sections.find((section) => section.id === 'todos')?.sources_count
+    || new Set(
+      sections.flatMap((section) => (section.sources || []).map((source) => source.source_id)).filter(Boolean),
+    ).size
 
   return (
     <section className="panel explorer-panel">

@@ -6,8 +6,8 @@ export default function HeroHome({ suggestions, onAsk, disabled }) {
       <h1>Consulta documental de contratação pública</h1>
       <p>
         Explora perguntas sobre objeto, entidade adjudicante, prazos, preço base, critérios,
-        caução, CPV, lotes, local de execução e requisitos. O sistema privilegia extração direta,
-        citações claras e fallback documental quando o motor local não está disponível.
+        caução, CPV, lotes, local de execução e requisitos. Esta demonstração usa um corpus regional
+        focado no Minho para reduzir saltos semânticos e manter as respostas ancoradas em procedimentos concretos.
       </p>
       <div className="hero-home-suggestions">
         {suggestions.map((question) => (

@@ -35,10 +35,21 @@ def load_vector_store(embeddings: Embeddings) -> Chroma:
     return Chroma(persist_directory=str(config.CHROMA_DIR), embedding_function=embeddings)
 
 
-def query_vector_store(vectorstore: Chroma, query: str, *, k: int, category: str | None = None) -> list:
-    where = None
+def query_vector_store(
+    vectorstore: Chroma,
+    query: str,
+    *,
+    k: int,
+    category: str | None = None,
+    preferred_source_id: str | None = None,
+) -> list:
+    where = {}
     if category and category != "todos":
-        where = {"category": category}
+        where["category"] = category
+    if preferred_source_id:
+        where["source_id"] = str(preferred_source_id)
+    if not where:
+        where = None
     results = vectorstore.similarity_search_with_score(query, k=k, filter=where)
     docs = []
     for doc, distance in results:

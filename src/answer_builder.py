@@ -381,7 +381,7 @@ def _direct_extraction(query: str, analysis: QueryAnalysis, chunks: Sequence[Ret
             answer = (
                 f"## Resposta\nEncontrei um procedimento com prazo explícito: **{source_label}**. O prazo identificado é **{value}** [{cited[0]}]."
                 if analysis.is_search_example
-                else f"## Resposta\nO prazo identificado é **{value}** [{cited[0]}]."
+                else f"## Resposta\nNo procedimento **{source_label}**, o prazo identificado é **{value}** [{cited[0]}]."
             )
             details = "## Detalhes\nO valor foi extraído diretamente do campo de prazo presente no documento recuperado."
             confidence = ConfidenceDecision("alta", 0.88, ["Foi encontrado um campo de prazo explícito no documento."], True)
@@ -393,7 +393,7 @@ def _direct_extraction(query: str, analysis: QueryAnalysis, chunks: Sequence[Ret
             answer = (
                 f"## Resposta\nEncontrei um procedimento com preço base explícito: **{source_label}**. O preço base identificado é **{value}** [{cited[0]}]."
                 if analysis.is_search_example
-                else f"## Resposta\nO valor/preço base identificado é **{value}** [{cited[0]}]."
+                else f"## Resposta\nNo procedimento **{source_label}**, o valor/preço base identificado é **{value}** [{cited[0]}]."
             )
             details = "## Detalhes\nO montante foi extraído diretamente do campo de preço base do procedimento."
             confidence = ConfidenceDecision("alta", 0.9, ["Foi encontrado um montante monetário explícito associado ao preço base."], True)
@@ -411,9 +411,9 @@ def _direct_extraction(query: str, analysis: QueryAnalysis, chunks: Sequence[Ret
                     answer = f"## Resposta\nEncontrei um procedimento ({source_label}) que indica **{value}** para a prestação de caução [{cited[0]}]."
             else:
                 if value.lower().startswith("s"):
-                    answer = f"## Resposta\nSim, o procedimento prevê prestação de caução.{percentage_tail} [{cited[0]}]."
+                    answer = f"## Resposta\nNo procedimento **{source_label}**, existe prestação de caução.{percentage_tail} [{cited[0]}]."
                 else:
-                    answer = f"## Resposta\nNão, o procedimento indica que não existe prestação de caução [{cited[0]}]."
+                    answer = f"## Resposta\nNo procedimento **{source_label}**, não existe prestação de caução [{cited[0]}]."
             details = "## Detalhes\nA resposta foi construída a partir do campo explícito de caução/garantia encontrado na fonte principal."
             confidence = ConfidenceDecision("alta", 0.91, ["Foi encontrado um campo explícito de prestação de caução."], True)
     elif intent == "cpv":
@@ -424,7 +424,7 @@ def _direct_extraction(query: str, analysis: QueryAnalysis, chunks: Sequence[Ret
             answer = (
                 f"## Resposta\nEncontrei um procedimento com CPV explícito: **{source_label}**. O CPV identificado é **{value}** [{cited[0]}]."
                 if analysis.is_search_example
-                else f"## Resposta\nO CPV identificado é **{value}** [{cited[0]}]."
+                else f"## Resposta\nNo procedimento **{source_label}**, o CPV identificado é **{value}** [{cited[0]}]."
             )
             details = "## Detalhes\nO código foi extraído diretamente do campo CPV/Vocabulário Principal recuperado."
             confidence = ConfidenceDecision("alta", 0.92, ["Foi encontrado um código CPV explícito no documento."], True)
@@ -437,7 +437,7 @@ def _direct_extraction(query: str, analysis: QueryAnalysis, chunks: Sequence[Ret
             answer = (
                 f"## Resposta\nEncontrei um procedimento com referência explícita a critérios de adjudicação: **{source_label}**. O trecho recuperado indica **{short}** [{cited[0]}]."
                 if analysis.is_search_example
-                else f"## Resposta\nOs critérios de adjudicação recuperados indicam: **{short}** [{cited[0]}]."
+                else f"## Resposta\nNo procedimento **{source_label}**, os critérios de adjudicação recuperados indicam: **{short}** [{cited[0]}]."
             )
             details = "## Detalhes\nA resposta foi sintetizada a partir da secção explícita de critério de adjudicação."
             confidence = ConfidenceDecision("média", 0.78, ["Foi encontrada a secção explícita de critério de adjudicação."], True)
@@ -449,7 +449,7 @@ def _direct_extraction(query: str, analysis: QueryAnalysis, chunks: Sequence[Ret
             answer = (
                 f"## Resposta\nEncontrei um procedimento cuja entidade adjudicante identificada é **{value}**. A fonte principal recuperada é **{source_label}** [{cited[0]}]."
                 if analysis.is_search_example
-                else f"## Resposta\nA entidade identificada é **{value}** [{cited[0]}]."
+                else f"## Resposta\nNo procedimento **{source_label}**, a entidade identificada é **{value}** [{cited[0]}]."
             )
             details = "## Detalhes\nA entidade foi extraída diretamente do cabeçalho institucional do documento recuperado."
             confidence = ConfidenceDecision("alta", 0.88, ["Foi encontrada uma designação explícita da entidade adjudicante/emitente."], True)
@@ -462,7 +462,7 @@ def _direct_extraction(query: str, analysis: QueryAnalysis, chunks: Sequence[Ret
             answer = (
                 f"## Resposta\nEncontrei um procedimento com local de execução explícito: **{source_label}**. O local recuperado é **{short}** [{cited[0]}]."
                 if analysis.is_search_example
-                else f"## Resposta\nO local identificado é **{short}** [{cited[0]}]."
+                else f"## Resposta\nNo procedimento **{source_label}**, o local identificado é **{short}** [{cited[0]}]."
             )
             details = "## Detalhes\nO local foi extraído diretamente da secção de execução/local de trabalho do documento."
             confidence = ConfidenceDecision("média", 0.79, ["Foi encontrada uma secção explícita sobre o local."], True)
@@ -475,7 +475,7 @@ def _direct_extraction(query: str, analysis: QueryAnalysis, chunks: Sequence[Ret
             answer = (
                 f"## Resposta\nEncontrei um procedimento com requisitos/habilitações explícitos: **{source_label}**. O trecho recuperado indica **{short}** [{cited[0]}]."
                 if analysis.is_search_example
-                else f"## Resposta\nOs requisitos/habilitações recuperados indicam: **{short}** [{cited[0]}]."
+                else f"## Resposta\nNo procedimento **{source_label}**, os requisitos/habilitações recuperados indicam: **{short}** [{cited[0]}]."
             )
             details = "## Detalhes\nA resposta foi extraída diretamente da secção de habilitação/documentos de habilitação do documento."
             confidence = ConfidenceDecision("média", 0.77, ["Foi encontrada uma secção explícita de habilitação/requisitos."], True)
@@ -487,7 +487,7 @@ def _direct_extraction(query: str, analysis: QueryAnalysis, chunks: Sequence[Ret
             answer = (
                 f"## Resposta\nEncontrei um procedimento com informação explícita sobre lotes: **{source_label}**. O documento indica **{value}** quanto à existência de lotes [{cited[0]}]."
                 if analysis.is_search_example
-                else f"## Resposta\nO documento indica **{value}** quanto à existência de lotes [{cited[0]}]."
+                else f"## Resposta\nNo procedimento **{source_label}**, o documento indica **{value}** quanto à existência de lotes [{cited[0]}]."
             )
             details = "## Detalhes\nA resposta foi extraída diretamente do campo relativo à divisão em lotes."
             confidence = ConfidenceDecision("alta", 0.89, ["Foi encontrado um campo explícito sobre a existência de lotes."], True)
@@ -500,7 +500,7 @@ def _direct_extraction(query: str, analysis: QueryAnalysis, chunks: Sequence[Ret
             answer = (
                 f"## Resposta\nUm procedimento compatível com o teu pedido é **{source_label}**. O objeto identificado é **{short}** [{cited[0]}]."
                 if analysis.is_search_example
-                else f"## Resposta\nO objeto/designação identificado é **{short}** [{cited[0]}]."
+                else f"## Resposta\nNo procedimento **{source_label}**, o objeto/designação identificado é **{short}** [{cited[0]}]."
             )
             details = "## Detalhes\nA resposta foi extraída diretamente do campo de designação/descrição do contrato ou do sumário do aviso."
             confidence = ConfidenceDecision("alta", 0.85, ["Foi encontrada uma designação/descrição explícita do objeto."], True)

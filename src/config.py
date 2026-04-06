@@ -42,17 +42,12 @@ INTENT_SYNONYMS = {
 }
 
 QUESTION_SUGGESTIONS = [
-    "Qual é o objeto deste aviso ou contrato?",
-    "Qual é o preço base ou valor base?",
-    "Qual é o prazo para apresentação das propostas?",
-    "Existe prestação de caução?",
-    "Qual é o CPV indicado?",
-    "Que critérios de adjudicação são referidos?",
-    "Quem é a entidade adjudicante ou emitente?",
-    "O procedimento tem lotes?",
-    "Qual é o prazo de execução do contrato?",
-    "Que habilitações ou documentos são exigidos?",
-    "Qual é o local de execução do contrato?",
+    "Procura um procedimento do Município de Amares e identifica o objeto.",
+    "Procura um procedimento do Município de Braga com preço base explícito.",
+    "Procura um procedimento de Arcos de Valdevez e verifica se tem lotes.",
+    "Procura um procedimento de Viana do Castelo e indica o prazo de apresentação.",
+    "Mostra um procedimento da zona do Minho onde exista prestação de caução.",
+    "Procura um procedimento e identifica a entidade adjudicante.",
 ]
 
 FOLLOW_UP_BY_INTENT = {

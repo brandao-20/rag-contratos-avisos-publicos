@@ -46,7 +46,14 @@ class RAGPipeline:
         self.llm = llm
         self.default_backend = "vector" if vectorstore is not None else "lexical"
 
-    def retrieve(self, query: str, *, top_k: int | None = None, category: str | None = None) -> tuple[str, QueryAnalysis, list[Document], str]:
+    def retrieve(
+        self,
+        query: str,
+        *,
+        top_k: int | None = None,
+        category: str | None = None,
+        preferred_source_id: str | None = None,
+    ) -> tuple[str, QueryAnalysis, list[Document], str]:
         analysis = analyze_query(query)
         retrieval_query = augment_query_for_retrieval(query, analysis)
         desired_k = top_k or self.top_k
@@ -62,6 +69,7 @@ class RAGPipeline:
                     retrieval_query,
                     k=candidate_k,
                     category=category,
+                    preferred_source_id=preferred_source_id,
                 )
                 backend = "vector"
             except Exception as exc:
@@ -69,7 +77,7 @@ class RAGPipeline:
 
         normalized = normalize_chunks(query, docs, analysis.must_terms)
         if not normalized or vector_error is not None:
-            docs = lexical_search(query, analysis, k=candidate_k, category=category)
+            docs = lexical_search(query, analysis, k=candidate_k, category=category, preferred_source_id=preferred_source_id)
             backend = "lexical"
             normalized = normalize_chunks(query, docs, analysis.must_terms)
             if vector_error is not None and normalized:
@@ -96,9 +104,21 @@ class RAGPipeline:
     def extract_structured(self, docs: list[Document]) -> dict[str, Any]:
         return extract_structured_from_docs(docs)
 
-    def ask(self, query: str, *, top_k: int | None = None, category: str | None = None) -> QAResult:
+    def ask(
+        self,
+        query: str,
+        *,
+        top_k: int | None = None,
+        category: str | None = None,
+        preferred_source_id: str | None = None,
+    ) -> QAResult:
         start = time.perf_counter()
-        retrieval_query, analysis, docs, retrieval_backend = self.retrieve(query, top_k=top_k, category=category)
+        retrieval_query, analysis, docs, retrieval_backend = self.retrieve(
+            query,
+            top_k=top_k,
+            category=category,
+            preferred_source_id=preferred_source_id,
+        )
         normalized = normalize_chunks(query, docs, analysis.must_terms)
         context_docs = docs[: max(1, min(len(docs), top_k or self.top_k))]
         context = self._numbered_context(context_docs)
@@ -116,7 +136,7 @@ class RAGPipeline:
         )
         structured = self.extract_structured(context_docs)
         elapsed_ms = int((time.perf_counter() - start) * 1000)
-        grouped = group_documents_by_source(docs)
+        grouped = group_documents_by_source(docs, prioritized_source_ids=[preferred_source_id] if preferred_source_id else None)
         return QAResult(
             query=query,
             answer_markdown=package.answer_markdown,
