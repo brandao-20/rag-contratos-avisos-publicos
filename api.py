@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import re
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
@@ -10,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from src import config
+from src.catalog import build_corpus_overview, get_glossary_entries
 from src.session_store import create_session, delete_session, get_session, list_sessions, upsert_session
 
 
@@ -90,6 +92,7 @@ class AnswerMetaModel(BaseModel):
     used_llm: bool
     response_mode: str
     llm_label: str | None = None
+    retrieval_backend: str | None = None
 
 
 class ConfidenceModel(BaseModel):
@@ -107,7 +110,35 @@ class BootstrapModel(BaseModel):
     sessions_enabled: bool
     rag_backend_ready: bool
     rag_backend_error: str | None = None
+    rag_backend_mode: str = "offline"
+    rag_backend_message: str | None = None
     recommended_frontend: str = "react"
+
+
+class CorpusSourceModel(BaseModel):
+    source_id: str
+    title: str
+    entity: str | None = None
+    document_type: str | None = None
+    source_url: str | None = None
+    notes: str | None = None
+
+
+class CorpusSectionModel(BaseModel):
+    id: str
+    label: str
+    description: str
+    sources_count: int
+    example_questions: list[str] = Field(default_factory=list)
+    sources: list[CorpusSourceModel] = Field(default_factory=list)
+
+
+class GlossaryEntryModel(BaseModel):
+    term: str
+    category: str
+    short_definition: str
+    why_it_matters: str
+    related_terms: list[str] = Field(default_factory=list)
 
 
 class AskResponseModel(BaseModel):
@@ -117,7 +148,7 @@ class AskResponseModel(BaseModel):
     sources: list[SourceCardModel]
     structured_data: dict[str, Any]
     follow_up_questions: list[str]
-    # compatibilidade transitória com o contrato anterior
+    procedural_steps: list[str]
     answer_markdown: str
     confidence_label: str
     confidence_score: float
@@ -130,12 +161,13 @@ class AskResponseModel(BaseModel):
     used_llm: bool
     response_mode: str
     llm_label: str | None = None
+    retrieval_backend: str | None = None
 
 
 app = FastAPI(
     title="RAG Contratos Públicos API",
-    version="0.3.0",
-    description="API FastAPI para chats persistentes e perguntas ao motor RAG.",
+    version="0.4.0",
+    description="API FastAPI para chats persistentes, exploração do corpus e perguntas ao motor RAG.",
 )
 
 app.add_middleware(
@@ -148,40 +180,103 @@ app.add_middleware(
 
 
 @lru_cache(maxsize=1)
-def _load_pipeline() -> Any:
-    """Carrega o motor RAG apenas quando necessário."""
+def _index_metadata() -> dict[str, Any]:
+    if not config.INDEX_METADATA_FILE.exists():
+        return {}
     try:
-        from src.embeddings import get_embeddings
-        from src.rag_pipeline import RAGPipeline
-        from src.vector_store import load_vector_store
-    except Exception as exc:  # pragma: no cover - depende do ambiente local
-        raise RuntimeError(
-            "Dependências do backend RAG indisponíveis. "
-            "Confirma chromadb/langchain/sentence-transformers e o índice vetorial."
-        ) from exc
+        import json
 
-    embedding_name, _ = config.get_model_names()
-    embeddings = get_embeddings(embedding_name)
-    vectorstore = load_vector_store(embeddings)
-    return RAGPipeline(vectorstore=vectorstore, top_k=config.TOP_K)
+        return json.loads(config.INDEX_METADATA_FILE.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
 
 
 @lru_cache(maxsize=1)
-def _backend_probe() -> tuple[bool, str | None]:
+def _load_pipeline() -> Any:
+    """Carrega o motor RAG apenas quando necessário.
+
+    Prioriza retrieval vetorial quando o índice e o provider correspondente estão
+    disponíveis. Caso contrário, mantém um fallback lexical local para evitar 503
+    em ambiente de demo.
+    """
     try:
-        _load_pipeline()
-        return True, None
+        from src.embeddings import get_embeddings, get_embeddings_status, ollama_available
+        from src.local_retrieval import load_local_chunks
+        from src.rag_pipeline import RAGPipeline
     except Exception as exc:  # pragma: no cover - depende do ambiente local
-        return False, str(exc)
+        raise RuntimeError(
+            "Dependências do backend RAG indisponíveis. "
+            "Confirma langchain/sentence-transformers e o corpus local."
+        ) from exc
+
+    embedding_name, llm_name = config.get_model_names()
+    embedding_status = get_embeddings_status(embedding_name)
+    index_metadata = _index_metadata()
+
+    vectorstore = None
+    can_try_vector = config.CHROMA_DIR.exists() and any(config.CHROMA_DIR.iterdir()) and embedding_status.get("ready")
+    if can_try_vector:
+        built_provider = index_metadata.get("provider")
+        built_model = index_metadata.get("model")
+        provider_matches = not built_provider or built_provider == embedding_status.get("provider")
+        model_matches = not built_model or built_model == embedding_status.get("model") or built_model == embedding_name
+        if provider_matches and model_matches:
+            try:
+                from src.vector_store import load_vector_store
+
+                embeddings = get_embeddings(embedding_name)
+                vectorstore = load_vector_store(embeddings)
+            except Exception:
+                vectorstore = None
+
+    llm = None
+    if ollama_available(llm_name):
+        try:
+            from langchain_community.chat_models import ChatOllama
+
+            llm = ChatOllama(
+                model=llm_name,
+                base_url=config.OLLAMA_BASE_URL,
+                temperature=0.05,
+                num_predict=260,
+                timeout=config.OLLAMA_REQUEST_TIMEOUT,
+            )
+        except Exception:
+            llm = None
+
+    if vectorstore is None and not load_local_chunks():
+        raise RuntimeError(
+            "Sem índice vetorial utilizável e sem corpus local legível para fallback lexical."
+        )
+
+    return RAGPipeline(vectorstore=vectorstore, top_k=config.TOP_K, llm=llm)
+
+
+@lru_cache(maxsize=1)
+def _backend_probe() -> tuple[bool, str | None, str, str | None]:
+    try:
+        pipeline = _load_pipeline()
+        if getattr(pipeline, "vectorstore", None) is not None:
+            if getattr(pipeline, "llm", None) is not None:
+                return True, None, "vector+llm", "Retrieval vetorial e síntese local disponíveis."
+            return True, None, "vector", "Retrieval vetorial disponível; LLM opcional indisponível."
+        return True, None, "lexical", "Modo documental local ativo; respostas continuam disponíveis sem dependência do Ollama."
+    except Exception as exc:  # pragma: no cover - depende do ambiente local
+        return False, str(exc), "offline", None
+
 
 
 def _invalidate_backend_probe() -> None:
     _backend_probe.cache_clear()
+    _load_pipeline.cache_clear()
+    _index_metadata.cache_clear()
+
 
 
 def _is_default_session_title(title: str | None) -> bool:
     normalized = (title or "").strip().lower()
     return normalized in {"nova sessão", "novo chat", "chat novo", "chat sem título", "novo"}
+
 
 
 def _auto_title_from_query(query: str, *, max_length: int = 72) -> str:
@@ -191,13 +286,25 @@ def _auto_title_from_query(query: str, *, max_length: int = 72) -> str:
     return cleaned[:max_length].rstrip()
 
 
+
+def _markdown_to_plain_preview(text: str | None) -> str:
+    raw = str(text or "")
+    raw = re.sub(r"^##\s+", "", raw, flags=re.MULTILINE)
+    raw = re.sub(r"\[(\d+)\]", "", raw)
+    raw = raw.replace("**", "").replace("*", "").replace("`", "")
+    raw = re.sub(r"\n+", " ", raw)
+    raw = re.sub(r"\s+", " ", raw).strip()
+    return raw
+
+
 def _safe_preview(text: str | None, *, limit: int = 140) -> str | None:
-    content = " ".join((text or "").split()).strip()
+    content = _markdown_to_plain_preview(text)
     if not content:
         return None
     if len(content) <= limit:
         return content
     return content[: limit - 1].rstrip() + "…"
+
 
 
 def _pages_label(pages: list[int]) -> str | None:
@@ -212,8 +319,10 @@ def _pages_label(pages: list[int]) -> str | None:
     return f"pp. {pages[0]}–{pages[-1]}"
 
 
+
 def _locator_from_page(page: int | None) -> str | None:
     return f"p. {page}" if isinstance(page, int) else None
+
 
 
 def _normalize_source_card(raw: dict[str, Any]) -> SourceCardModel:
@@ -252,17 +361,24 @@ def _normalize_source_card(raw: dict[str, Any]) -> SourceCardModel:
     )
 
 
+
 def _session_to_summary(session: dict[str, Any]) -> SessionSummaryModel:
     messages = session.get("messages") or []
     last_message = messages[-1] if messages and isinstance(messages[-1], dict) else None
+    preview = None
+    if isinstance(last_message, dict):
+        if last_message.get("role") == "assistant" and isinstance(last_message.get("qa_result"), dict):
+            preview = _safe_preview(((last_message.get("qa_result") or {}).get("answer") or {}).get("markdown"))
+        preview = preview or _safe_preview(last_message.get("content"))
     return SessionSummaryModel(
         id=str(session.get("id") or ""),
         title=str(session.get("title") or "Novo chat"),
         created_at=str(session.get("created_at") or ""),
         updated_at=str(session.get("updated_at") or session.get("created_at") or ""),
         messages_count=len(messages),
-        last_message_preview=_safe_preview((last_message or {}).get("content")),
+        last_message_preview=preview,
     )
+
 
 
 def _session_to_detail(session: dict[str, Any]) -> SessionDetailModel:
@@ -289,8 +405,10 @@ def _session_to_detail(session: dict[str, Any]) -> SessionDetailModel:
     )
 
 
+
 def _normalize_question_key(value: str) -> str:
     return " ".join((value or "").lower().replace("?", " ").split())
+
 
 
 def _dedupe_follow_up_questions(questions: list[Any], current_query: str) -> list[str]:
@@ -310,6 +428,7 @@ def _dedupe_follow_up_questions(questions: list[Any], current_query: str) -> lis
     return kept
 
 
+
 def _derive_llm_label(result: Any) -> str | None:
     raw = getattr(result, "used_llm", None)
     if isinstance(raw, str):
@@ -318,6 +437,7 @@ def _derive_llm_label(result: Any) -> str | None:
     if raw is True:
         return "LLM"
     return None
+
 
 
 def _derive_response_mode(result: Any) -> str:
@@ -334,12 +454,14 @@ def on_startup() -> None:
 def health() -> dict[str, Any]:
     config.ensure_directories()
     chroma_exists = config.CHROMA_DIR.exists() and any(config.CHROMA_DIR.iterdir())
-    rag_backend_ready, rag_backend_error = _backend_probe()
+    rag_backend_ready, rag_backend_error, rag_backend_mode, rag_backend_message = _backend_probe()
     return {
         "status": "ok",
         "chroma_ready": chroma_exists,
         "rag_backend_ready": rag_backend_ready,
         "rag_backend_error": rag_backend_error,
+        "rag_backend_mode": rag_backend_mode,
+        "rag_backend_message": rag_backend_message,
         "sessions_file": str(config.SESSIONS_FILE),
         "sessions_count": len(list_sessions()),
         "api_version": app.version,
@@ -354,6 +476,8 @@ def diagnostics() -> dict[str, Any]:
         "manual_checks": [
             "GET /health devolve status ok e estado coerente do backend RAG",
             "GET /bootstrap devolve categorias e perguntas sugeridas",
+            "GET /corpus/overview devolve catálogo navegável do corpus",
+            "GET /glossary devolve termos do domínio público",
             "POST /sessions cria um chat persistente",
             "POST /sessions/{id}/ask devolve answer, confidence, sources e structured_data",
             "DELETE /sessions/{id} remove o chat sem deixar estado inválido",
@@ -363,23 +487,40 @@ def diagnostics() -> dict[str, Any]:
 
 @app.get("/bootstrap", response_model=BootstrapModel)
 def bootstrap() -> BootstrapModel:
-    rag_backend_ready, rag_backend_error = _backend_probe()
+    rag_backend_ready, rag_backend_error, rag_backend_mode, rag_backend_message = _backend_probe()
     return BootstrapModel(
         api_version=app.version,
-        product_title="RAG para análise de contratos e avisos públicos",
+        product_title="Consulta documental de contratos e avisos públicos",
         question_suggestions=list(config.QUESTION_SUGGESTIONS),
         categories=ALLOWED_CATEGORIES,
         default_category="todos",
         sessions_enabled=True,
         rag_backend_ready=rag_backend_ready,
         rag_backend_error=rag_backend_error,
+        rag_backend_mode=rag_backend_mode,
+        rag_backend_message=rag_backend_message,
         recommended_frontend="react",
     )
 
 
+@app.get("/corpus/overview", response_model=list[CorpusSectionModel])
+def corpus_overview() -> list[CorpusSectionModel]:
+    return [CorpusSectionModel(**item) for item in build_corpus_overview()]
+
+
+@app.get("/glossary", response_model=list[GlossaryEntryModel])
+def glossary() -> list[GlossaryEntryModel]:
+    payload = []
+    for item in get_glossary_entries():
+        row = dict(item)
+        row["related_terms"] = list(row.get("related_terms") or [])
+        payload.append(GlossaryEntryModel(**row))
+    return payload
+
+
 @app.get("/sessions", response_model=list[SessionSummaryModel])
 def api_list_sessions() -> list[SessionSummaryModel]:
-    return [_session_to_summary(s) for s in list_sessions()]
+    return [_session_to_summary(session) for session in list_sessions()]
 
 
 @app.post("/sessions", response_model=SessionDetailModel, status_code=201)
@@ -416,9 +557,6 @@ def api_delete_session(session_id: str) -> dict[str, bool]:
 
 @app.post("/sessions/{session_id}/ask", response_model=AskResponseModel)
 def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
-    if not (config.CHROMA_DIR.exists() and any(config.CHROMA_DIR.iterdir())):
-        raise HTTPException(status_code=503, detail="Índice vetorial inexistente. Executa scripts/ingest.py primeiro.")
-
     session = get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Chat não encontrado.")
@@ -441,6 +579,7 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
     follow_up_questions = _dedupe_follow_up_questions(getattr(result, "follow_up_questions", []) or [], payload.query)
     response_mode = _derive_response_mode(result)
     llm_label = _derive_llm_label(result)
+    procedural_steps = [str(step).strip() for step in getattr(result, "procedural_steps", []) or [] if str(step).strip()]
 
     session.setdefault("messages", [])
     session["messages"].append({"role": "user", "content": payload.query})
@@ -463,11 +602,12 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
                     "used_llm": bool(result.used_llm),
                     "response_mode": response_mode,
                     "llm_label": llm_label,
+                    "retrieval_backend": getattr(result, "retrieval_backend", None),
                 },
                 "sources": [item.model_dump() for item in sources],
                 "structured_data": result.structured_data,
                 "follow_up_questions": follow_up_questions,
-                # compatibilidade transitória
+                "procedural_steps": procedural_steps,
                 "confidence_label": result.confidence_label,
                 "confidence_score": result.confidence_score,
                 "confidence_reasons": result.confidence_reasons,
@@ -495,6 +635,7 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
         used_llm=bool(result.used_llm),
         response_mode=response_mode,
         llm_label=llm_label,
+        retrieval_backend=getattr(result, "retrieval_backend", None),
     )
     confidence = ConfidenceModel(
         label=result.confidence_label,
@@ -509,6 +650,7 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
         sources=sources,
         structured_data=result.structured_data,
         follow_up_questions=follow_up_questions,
+        procedural_steps=procedural_steps,
         answer_markdown=result.answer_markdown,
         confidence_label=result.confidence_label,
         confidence_score=result.confidence_score,
@@ -521,4 +663,5 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
         used_llm=bool(result.used_llm),
         response_mode=response_mode,
         llm_label=llm_label,
+        retrieval_backend=getattr(result, "retrieval_backend", None),
     )

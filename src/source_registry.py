@@ -1,4 +1,4 @@
-"""Registo e enriquecimento de fontes a partir do manifesto."""
+"""Registo e agrupamento de fontes documentais."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import csv
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional, Sequence
 
 from . import config
 
@@ -33,6 +33,21 @@ def _derive_category(document_type: str | None, filename: str) -> str:
     return "documento_publico"
 
 
+def _humanize_title(raw_title: str | None, filename: str, document_type: str | None) -> str:
+    raw = (raw_title or '').strip()
+    source_id = Path(filename).stem
+    if raw and not raw.isdigit():
+        return raw
+    label = (document_type or '').strip()
+    if 'cp_hora' in (label.lower() + ' ' + filename.lower()):
+        return f'Procedimento {source_id}'
+    if '2.ª série' in label.lower() or '2. serie' in label.lower() or 'serie' in label.lower():
+        return f'Aviso DR {source_id}'
+    if label:
+        return f'{label} · {source_id}'
+    return f'Documento {source_id}'
+
+
 @lru_cache(maxsize=1)
 def load_source_registry() -> dict[str, SourceRecord]:
     config.ensure_directories()
@@ -50,7 +65,12 @@ def load_source_registry() -> dict[str, SourceRecord]:
             doc_type = (row.get("document_type") or "").strip() or None
             category = _derive_category(doc_type, filename)
             entity = (row.get("entity") or "").strip() or None
-            title = (row.get("title") or "").strip() or filename.replace("_", " ").replace(".pdf", "").replace(".txt", "").strip()
+            title = _humanize_title(
+                (row.get("title") or "").strip()
+                or filename.replace("_", " ").replace(".pdf", "").replace(".txt", "").strip(),
+                filename,
+                doc_type,
+            )
             records[source_id] = SourceRecord(
                 source_id=source_id,
                 filename=filename,
@@ -64,6 +84,13 @@ def load_source_registry() -> dict[str, SourceRecord]:
     return records
 
 
+
+def clear_registry_cache() -> None:
+    load_source_registry.cache_clear()
+    get_source.cache_clear()
+    get_source_by_filename.cache_clear()
+
+
 @lru_cache(maxsize=1024)
 def get_source_by_filename(filename: str) -> Optional[SourceRecord]:
     source_id = Path(filename).stem
@@ -73,6 +100,11 @@ def get_source_by_filename(filename: str) -> Optional[SourceRecord]:
 @lru_cache(maxsize=1024)
 def get_source(source_id: str) -> Optional[SourceRecord]:
     return load_source_registry().get(source_id)
+
+
+
+def list_sources() -> list[SourceRecord]:
+    return list(load_source_registry().values())
 
 
 
@@ -94,8 +126,9 @@ def enrich_metadata(meta: Dict[str, Any]) -> Dict[str, Any]:
 
 
 
-def group_documents_by_source(docs: Iterable[Any]) -> list[dict[str, Any]]:
+def group_documents_by_source(docs: Iterable[Any], prioritized_source_ids: Sequence[str] | None = None) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
+    priority = {str(item) for item in (prioritized_source_ids or []) if item}
     for idx, doc in enumerate(docs, start=1):
         meta = enrich_metadata(getattr(doc, "metadata", {}) or {})
         source_id = str(meta.get("source_id") or meta.get("source_file") or f"source_{idx}")
@@ -111,20 +144,26 @@ def group_documents_by_source(docs: Iterable[Any]) -> list[dict[str, Any]]:
                 "pages": [],
                 "citations": [],
                 "count": 0,
+                "priority": source_id in priority,
             },
         )
         page = meta.get("page")
         if page is not None and page not in group["pages"]:
             group["pages"].append(page)
-        group["citations"].append({
-            "index": idx,
-            "page": page,
-            "chunk_id": meta.get("chunk_id"),
-            "excerpt": getattr(doc, "page_content", ""),
-        })
+        group["citations"].append(
+            {
+                "index": idx,
+                "page": page,
+                "chunk_id": meta.get("chunk_id") or meta.get("chunk_uid"),
+                "excerpt": getattr(doc, "page_content", ""),
+            }
+        )
         group["count"] += 1
     out = list(grouped.values())
     for item in out:
         item["pages"] = sorted([p for p in item["pages"] if p is not None])
         item["primary_excerpt"] = item["citations"][0]["excerpt"] if item["citations"] else ""
+    out.sort(key=lambda row: (not bool(row.get("priority")), -int(row.get("count") or 0), str(row.get("title") or "")))
+    for item in out:
+        item.pop("priority", None)
     return out

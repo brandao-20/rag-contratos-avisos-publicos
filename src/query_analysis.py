@@ -25,6 +25,21 @@ IRRELEVANT_PATTERNS = (
     "mercado imobili",
     "euribor",
     "tempo em lisboa",
+    "melhor zona",
+    "opini",
+    "recomenda",
+)
+
+PROCEDURAL_PATTERNS = (
+    "como ",
+    "quais os passos",
+    "quais são os passos",
+    "o que devo verificar",
+    "o que verificar",
+    "como participar",
+    "como apresentar",
+    "como cumprir",
+    "como submeter",
 )
 
 
@@ -35,6 +50,8 @@ class QueryAnalysis:
     preferred_terms: tuple[str, ...] = field(default_factory=tuple)
     answer_mode: str = "grounded"
     reason: str = ""
+    is_procedural: bool = False
+
 
 
 def norm(text: str) -> str:
@@ -43,9 +60,11 @@ def norm(text: str) -> str:
     return s.lower().strip()
 
 
+
 def tokenize(text: str) -> list[str]:
     toks = re.findall(r"[a-zA-Zà-ÿ0-9%\.\-/]{2,}", norm(text))
     return [t for t in toks if t not in STOPWORDS]
+
 
 
 def should_force_dont_know(query: str) -> bool:
@@ -53,13 +72,20 @@ def should_force_dont_know(query: str) -> bool:
     return any(term in qn for term in IRRELEVANT_PATTERNS)
 
 
+
+def is_procedural_query(query: str) -> bool:
+    qn = norm(query)
+    return any(qn.startswith(pattern) or pattern in qn for pattern in PROCEDURAL_PATTERNS)
+
+
+
 def _contains_any(text: str, items: Iterable[str]) -> bool:
     return any(norm(i) in text for i in items)
 
 
+
 def classify_intent(query: str) -> str:
     qn = norm(query)
-    # intents mais específicos primeiro
     if _contains_any(qn, config.INTENT_SYNONYMS["caucao"]):
         return "caucao"
     if _contains_any(qn, config.INTENT_SYNONYMS["cpv"]):
@@ -81,6 +107,7 @@ def classify_intent(query: str) -> str:
     if _contains_any(qn, config.INTENT_SYNONYMS["legal"]):
         return "legal"
     return "objeto"
+
 
 
 def analyze_query(query: str) -> QueryAnalysis:
@@ -111,13 +138,18 @@ def analyze_query(query: str) -> QueryAnalysis:
     else:
         must_terms = ["designação do contrato", "descrição"]
 
+    procedural = is_procedural_query(query)
+    answer_mode = "procedural" if procedural else "grounded"
+
     return QueryAnalysis(
         intent=intent,
         must_terms=tuple(must_terms),
         preferred_terms=tuple(preferred_terms),
-        answer_mode="grounded",
+        answer_mode=answer_mode,
         reason=f"intent:{intent}",
+        is_procedural=procedural,
     )
+
 
 
 def augment_query_for_retrieval(query: str, analysis: QueryAnalysis | None = None) -> str:
@@ -147,11 +179,11 @@ def augment_query_for_retrieval(query: str, analysis: QueryAnalysis | None = Non
         parts.extend(["procedimento com lotes", "lotes", "não", "sim"])
 
     seen = set()
-    ordered = []
-    for p in parts:
-        pn = norm(p)
-        if not pn or pn in seen:
+    unique_parts: list[str] = []
+    for part in parts:
+        normalized = norm(part)
+        if not normalized or normalized in seen:
             continue
-        seen.add(pn)
-        ordered.append(p.strip())
-    return " | ".join(ordered)
+        seen.add(normalized)
+        unique_parts.append(part)
+    return " | ".join(unique_parts)

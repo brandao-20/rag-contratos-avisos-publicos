@@ -1,4 +1,4 @@
-"""Pipeline RAG principal com retrieval, guardrails, confiança e output para UI."""
+"""Pipeline RAG principal com retrieval híbrido e fallback lexical local."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from langchain.schema import Document
 from . import config
 from .answer_builder import AnswerPackage, build_grounded_answer, normalize_chunks
 from .extractors import extract_structured_from_docs
+from .local_retrieval import lexical_search, load_local_chunks
 from .prompts import QA_PROMPT_TEMPLATE
 from .query_analysis import QueryAnalysis, analyze_query, augment_query_for_retrieval
 from .source_registry import group_documents_by_source
@@ -32,45 +33,55 @@ class QAResult:
     citations_count: int
     sources_grouped: list[dict[str, Any]]
     follow_up_questions: list[str]
+    procedural_steps: list[str]
     used_llm: bool
     analysis: QueryAnalysis
+    retrieval_backend: str = "lexical"
 
 
 class RAGPipeline:
-    def __init__(self, vectorstore: Any, *, top_k: int = config.TOP_K) -> None:
+    def __init__(self, vectorstore: Any | None, *, top_k: int = config.TOP_K, llm: Any | None = None) -> None:
         self.vectorstore = vectorstore
         self.top_k = top_k
-        _, llm_name = config.get_model_names()
-        try:
-            from langchain_community.chat_models import ChatOllama
+        self.llm = llm
+        self.default_backend = "vector" if vectorstore is not None else "lexical"
 
-            self.llm = ChatOllama(
-                model=llm_name,
-                base_url=config.OLLAMA_BASE_URL,
-                temperature=0.05,
-                num_predict=260,
-                timeout=config.OLLAMA_REQUEST_TIMEOUT,
-            )
-        except Exception:
-            self.llm = None
-
-    def retrieve(self, query: str, *, top_k: int | None = None, category: str | None = None) -> tuple[str, QueryAnalysis, list[Document]]:
+    def retrieve(self, query: str, *, top_k: int | None = None, category: str | None = None) -> tuple[str, QueryAnalysis, list[Document], str]:
         analysis = analyze_query(query)
         retrieval_query = augment_query_for_retrieval(query, analysis)
         desired_k = top_k or self.top_k
         candidate_k = max(desired_k, config.RETRIEVAL_CANDIDATES)
-        docs = query_vector_store(
-            self.vectorstore,
-            retrieval_query,
-            k=candidate_k,
-            category=category,
-        )
+
+        docs: list[Document] = []
+        backend = "lexical"
+        vector_error: Exception | None = None
+        if self.vectorstore is not None:
+            try:
+                docs = query_vector_store(
+                    self.vectorstore,
+                    retrieval_query,
+                    k=candidate_k,
+                    category=category,
+                )
+                backend = "vector"
+            except Exception as exc:
+                vector_error = exc
+
         normalized = normalize_chunks(query, docs, analysis.must_terms)
+        if not normalized or vector_error is not None:
+            docs = lexical_search(query, analysis, k=candidate_k, category=category)
+            backend = "lexical"
+            normalized = normalize_chunks(query, docs, analysis.must_terms)
+            if vector_error is not None and normalized:
+                for chunk in normalized[:4]:
+                    chunk.meta.setdefault("vector_error", str(vector_error))
+
         ranked_docs: list[Document] = []
-        for ch in normalized[:desired_k]:
-            pseudo = Document(page_content=ch.text, metadata=ch.meta)
-            ranked_docs.append(pseudo)
-        return retrieval_query, analysis, ranked_docs
+        for chunk in normalized[:desired_k]:
+            meta = dict(chunk.meta)
+            meta["retrieval_backend"] = backend
+            ranked_docs.append(Document(page_content=chunk.text, metadata=meta))
+        return retrieval_query, analysis, ranked_docs, backend
 
     def _numbered_context(self, docs: list[Document]) -> str:
         parts: list[str] = []
@@ -87,7 +98,7 @@ class RAGPipeline:
 
     def ask(self, query: str, *, top_k: int | None = None, category: str | None = None) -> QAResult:
         start = time.perf_counter()
-        retrieval_query, analysis, docs = self.retrieve(query, top_k=top_k, category=category)
+        retrieval_query, analysis, docs, retrieval_backend = self.retrieve(query, top_k=top_k, category=category)
         normalized = normalize_chunks(query, docs, analysis.must_terms)
         context_docs = docs[: max(1, min(len(docs), top_k or self.top_k))]
         context = self._numbered_context(context_docs)
@@ -105,7 +116,13 @@ class RAGPipeline:
         )
         structured = self.extract_structured(context_docs)
         elapsed_ms = int((time.perf_counter() - start) * 1000)
-        grouped = group_documents_by_source(docs)
+        prioritized_sources = []
+        for idx in package.cited_indexes:
+            if 0 < idx <= len(docs):
+                source_id = (docs[idx - 1].metadata or {}).get("source_id")
+                if source_id and source_id not in prioritized_sources:
+                    prioritized_sources.append(source_id)
+        grouped = group_documents_by_source(docs, prioritized_source_ids=prioritized_sources)
         return QAResult(
             query=query,
             answer_markdown=package.answer_markdown,
@@ -119,6 +136,11 @@ class RAGPipeline:
             citations_count=len(package.cited_indexes),
             sources_grouped=grouped,
             follow_up_questions=package.follow_up_questions,
+            procedural_steps=package.procedural_steps,
             used_llm=package.used_llm,
             analysis=analysis,
+            retrieval_backend=retrieval_backend,
         )
+
+
+__all__ = ["RAGPipeline", "QAResult"]
