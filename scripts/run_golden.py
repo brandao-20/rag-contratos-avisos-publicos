@@ -25,7 +25,17 @@ def main() -> None:
     for case in golden:
         result = pipeline.ask(case["query"], top_k=6)
         source_ids = [g["source_id"] for g in result.sources_grouped]
-        hit = case.get("expected_source_id") in source_ids if case.get("should_answer", True) else result.confidence_label == "baixa"
+        expected_source_id = case.get("expected_source_id")
+        should_answer = case.get("should_answer", True)
+        expected_intent = case.get("intent")
+        observed_intent = getattr(result.analysis, "intent", None)
+        intent_matches = not expected_intent or observed_intent == expected_intent
+        if expected_source_id:
+            hit = expected_source_id in source_ids and intent_matches
+        elif should_answer:
+            hit = result.confidence_label != "baixa" and len(source_ids) > 0 and intent_matches
+        else:
+            hit = result.confidence_label == "baixa" and intent_matches
         correct += int(bool(hit))
         rows.append({
             "id": case["id"],
@@ -33,6 +43,7 @@ def main() -> None:
             "hit": bool(hit),
             "sources": source_ids,
             "confidence": result.confidence_label,
+            "intent": observed_intent,
         })
     report = {"total": len(rows), "hits": correct, "accuracy": correct / max(1, len(rows)), "rows": rows}
     out = ROOT / "tests" / "golden_report_publicos.json"

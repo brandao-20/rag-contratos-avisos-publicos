@@ -7,7 +7,7 @@ export default function ToastStack({ toasts, onDismiss }) {
   return (
     <div className="toast-stack" aria-live="polite" aria-atomic="false">
       {toasts.map((toast) => (
-        <div key={toast.id} className={classNames('toast', `toast-${toast.type || 'info'}`)}>
+        <div key={toast.id} className={classNames('toast', `toast-${toast.type || 'info'}`)} role="status">
           <div className="toast-body">
             <div className="toast-title">{toast.title}</div>
             {toast.message ? <div className="toast-message">{toast.message}</div> : null}

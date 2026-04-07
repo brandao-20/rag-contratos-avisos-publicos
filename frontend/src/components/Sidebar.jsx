@@ -21,10 +21,14 @@ function SidebarRemoveButton({ label, onClick, disabled = false }) {
 }
 
 function FavoriteItem({ item, onOpen, onRemove }) {
+  const preview = trimText(item.preview || '', 88)
+  const label = item.chatTitle || 'Resposta guardada'
+
   return (
     <div className="favorite-item">
-      <button type="button" className="favorite-open-button" onClick={() => onOpen(item)}>
-        <span className="favorite-item-title">{item.chatTitle || 'Resposta guardada'}</span>
+      <button type="button" className="favorite-open-button" onClick={() => onOpen(item)} title={preview}>
+        <span className="favorite-item-title">{preview || 'Resposta guardada'}</span>
+        <span className="favorite-item-subtitle">{label}</span>
       </button>
       <SidebarRemoveButton label="Remover guardado" onClick={() => onRemove(item)} />
     </div>

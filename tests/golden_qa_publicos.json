@@ -1,17 +1,146 @@
 [
-  {"id":"PUB_001","query":"Qual é o preço base do procedimento?","should_answer":true,"expected_source_id":"419956306"},
-  {"id":"PUB_002","query":"Qual é o prazo para apresentação das propostas?","should_answer":true,"expected_source_id":"419954697"},
-  {"id":"PUB_003","query":"Que critérios de adjudicação são referidos?","should_answer":true,"expected_source_id":"419955720"},
-  {"id":"PUB_004","query":"Quem é a entidade adjudicante?","should_answer":true,"expected_source_id":"419954348"},
-  {"id":"PUB_005","query":"Existe prestação de caução?","should_answer":true,"expected_source_id":"419954740"},
-  {"id":"PUB_006","query":"Qual é o prazo de execução do contrato?","should_answer":true,"expected_source_id":"419956482"},
-  {"id":"PUB_007","query":"Há documentos de habilitação exigidos?","should_answer":true,"expected_source_id":"419952798"},
-  {"id":"PUB_008","query":"Qual é o local da execução do contrato?","should_answer":true,"expected_source_id":"419956523"},
-  {"id":"PUB_009","query":"O procedimento tem lotes?","should_answer":true,"expected_source_id":"419956523"},
-  {"id":"PUB_010","query":"Qual é o objeto do contrato?","should_answer":true,"expected_source_id":"419954080"},
-  {"id":"PUB_011","query":"Qual é o CPV indicado?","should_answer":true,"expected_source_id":"419955359"},
-  {"id":"PUB_NO_001","query":"Quem vai ganhar este concurso?","should_answer":false},
-  {"id":"PUB_NO_002","query":"Isto é legal ou ilegal?","should_answer":false},
-  {"id":"PUB_NO_003","query":"Qual é a melhor empresa para concorrer?","should_answer":false},
-  {"id":"PUB_NO_004","query":"Este contrato é um bom negócio?","should_answer":false}
+  {
+    "id": "PUB_001",
+    "query": "Procura um procedimento do Município de Amares com preço base explícito e indica o valor.",
+    "should_answer": true,
+    "intent": "valor",
+    "note": "Query de procura ancorada em entidade — deve retornar um procedimento do Município de Amares com valor numérico em EUR."
+  },
+  {
+    "id": "PUB_002",
+    "query": "Procura um procedimento de Viana do Castelo e indica o prazo de apresentação das propostas.",
+    "should_answer": true,
+    "intent": "prazo",
+    "note": "Query de procura ancorada em entidade — deve retornar procedimento de Viana do Castelo com prazo explícito."
+  },
+  {
+    "id": "PUB_003",
+    "query": "Mostra um procedimento de Arcos de Valdevez e diz se tem lotes.",
+    "should_answer": true,
+    "intent": "lotes",
+    "note": "Query de procura ancorada — deve retornar Sim ou Não para lotes com fonte explícita."
+  },
+  {
+    "id": "PUB_004",
+    "query": "Procura um procedimento do Município de Braga e identifica a entidade adjudicante.",
+    "should_answer": true,
+    "intent": "entidade",
+    "note": "Query de procura ancorada — entidade deve ser identificada e citada."
+  },
+  {
+    "id": "PUB_005",
+    "query": "Mostra um procedimento da zona do Minho onde exista prestação de caução.",
+    "should_answer": true,
+    "intent": "caucao",
+    "note": "Query de procura por caução — deve encontrar Sim com eventual percentagem."
+  },
+  {
+    "id": "PUB_006",
+    "query": "Procura um procedimento do Município de Amares e indica o prazo de execução do contrato.",
+    "should_answer": true,
+    "intent": "prazo",
+    "note": "Prazo de execução — distinto do prazo de propostas. Deve citar explicitamente o campo."
+  },
+  {
+    "id": "PUB_007",
+    "query": "Mostra um procedimento do Minho com documentos de habilitação exigidos.",
+    "should_answer": true,
+    "intent": "requisitos",
+    "note": "Deve retornar lista de documentos, não apenas Sim/Não."
+  },
+  {
+    "id": "PUB_008",
+    "query": "Procura um procedimento do Município de Braga e indica o local de execução do contrato.",
+    "should_answer": true,
+    "intent": "local",
+    "note": "Local deve ter detalhe geográfico (NUT ou município), não só País: Portugal."
+  },
+  {
+    "id": "PUB_009",
+    "query": "Mostra um procedimento de Arcos de Valdevez e identifica o objeto do contrato.",
+    "should_answer": true,
+    "intent": "objeto",
+    "note": "Objeto deve ser a designação do contrato citada da fonte."
+  },
+  {
+    "id": "PUB_010",
+    "query": "Procura um procedimento do Minho com CPV explícito e indica o código.",
+    "should_answer": true,
+    "intent": "cpv",
+    "note": "CPV deve ser um código de 8 dígitos citado diretamente do campo Vocabulário Principal."
+  },
+  {
+    "id": "PUB_011",
+    "query": "Que critérios de adjudicação são referidos no procedimento de Viana do Castelo?",
+    "should_answer": true,
+    "intent": "criterios",
+    "note": "Follow-up contextual — deve responder com Monofator/Multifator e eventuais fatores."
+  },
+  {
+    "id": "PUB_012",
+    "query": "Qual é o preço base do procedimento?",
+    "should_answer": false,
+    "intent": "valor",
+    "note": "Pergunta ambígua sem contexto de procedimento — não deve responder sem preferred_source_id nem contexto de chat."
+  },
+  {
+    "id": "PUB_013",
+    "query": "Procura um procedimento do Município de Amares com CPV explícito.",
+    "should_answer": true,
+    "intent": "cpv",
+    "note": "Deve encontrar pelo menos um procedimento de Amares com CPV identificado."
+  },
+  {
+    "id": "PUB_014",
+    "query": "Mostra um procedimento da zona do Minho com preço base e sem lotes.",
+    "should_answer": true,
+    "intent": "valor",
+    "note": "Query composta — valor + lotes. Deve retornar procedimento com ambos os campos."
+  },
+  {
+    "id": "PUB_NO_001",
+    "query": "Quem vai ganhar este concurso?",
+    "should_answer": false,
+    "intent": "objeto",
+    "note": "Pergunta de previsão/opinião — deve ser recusada."
+  },
+  {
+    "id": "PUB_NO_002",
+    "query": "Isto é legal ou ilegal?",
+    "should_answer": false,
+    "note": "Pergunta de avaliação jurídica — deve ser recusada."
+  },
+  {
+    "id": "PUB_NO_003",
+    "query": "Qual é a melhor empresa para concorrer?",
+    "should_answer": false,
+    "note": "Pergunta de recomendação — deve ser recusada."
+  },
+  {
+    "id": "PUB_NO_004",
+    "query": "Este contrato é um bom negócio?",
+    "should_answer": false,
+    "note": "Pergunta de opinião — deve ser recusada."
+  },
+  {
+    "id": "PUB_NO_005",
+    "query": "Lista todos os contratos ativos do corpus.",
+    "should_answer": false,
+    "intent": "objeto",
+    "note": "Listagem global — o sistema não suporta listing completo sem critério específico."
+  },
+  {
+    "id": "PUB_INTENT_001",
+    "query": "Qual é o preço do procedimento?",
+    "should_answer": false,
+    "intent": "valor",
+    "note": "Classificação de intenção: 'preço' deve resolver intent=valor, NÃO criterios. Sem contexto → should_answer=false."
+  },
+  {
+    "id": "PUB_INTENT_002",
+    "query": "Qual é o critério de adjudicação?",
+    "should_answer": false,
+    "intent": "criterios",
+    "note": "Classificação de intenção: 'critério de adjudicação' deve resolver intent=criterios."
+  }
 ]

@@ -23,7 +23,7 @@ A resposta é sempre apresentada com **fontes agrupadas, citações, confiança 
 - **Inspeção de citação** e metadados com indicação da **fonte principal** e do backend de retrieval.
 - **Persistência de contexto documental**: perguntas curtas de seguimento mantêm o mesmo procedimento em foco.
 - **Respostas procedimentais com passos sugeridos** quando a pergunta o justifica.
-- **Corpus do Minho reforçado e mais coerente**, incluindo novas fontes de Braga, Monção, Universidade do Minho, SASUM e Arcos de Valdevez.
+- **Corpus curado de anúncios de procedimento**, com respostas ancoradas em fontes reais e inspeção documental por citação.
 - Backend mantido em **FastAPI + motor RAG Python**, sem regressar a Streamlit.
 
 ## Arquitetura

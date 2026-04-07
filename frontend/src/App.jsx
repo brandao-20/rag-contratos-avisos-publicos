@@ -68,7 +68,7 @@ function App() {
   const [topK, setTopK] = useState(4)
   const [mode, setMode] = usePersistentState('rag-public-mode', 'chat')
   const [theme, setTheme] = usePersistentState('rag-theme', 'light')
-  const [favorites, setFavorites] = usePersistentState('rag-favorite-responses', [])
+  const [favorites, setFavorites] = useState([])
   const [sidebarSearch, setSidebarSearch] = useState('')
   const [glossarySearch, setGlossarySearch] = useState('')
   const [glossaryCategory, setGlossaryCategory] = useState('todos')
@@ -103,43 +103,66 @@ function App() {
     setToasts((current) => current.filter((toast) => toast.id !== toastId))
   }, [])
 
+  const normalizeSavedItems = useCallback((items) => (
+    Array.isArray(items)
+      ? items.map((item) => ({
+          ...item,
+          key: item.key,
+          sessionId: item.session_id,
+          chatTitle: item.chat_title,
+          responseId: item.response_id,
+          preview: item.preview,
+        }))
+      : []
+  ), [])
+
+
   const loadChats = useCallback(async (preferredId = null) => {
     const summaries = await fetchJSON('/sessions')
     setChats(summaries)
-    const nextId = preferredId || activeChatId || summaries[0]?.id || null
-    if (!nextId) {
+    const candidateIds = [preferredId, activeChatId, summaries[0]?.id].filter(Boolean)
+    if (!candidateIds.length) {
       setActiveChatId(null)
       setActiveChat(null)
       setSelectedResponseId(null)
       setSelectedCitation(null)
-      return
+      return null
     }
-    try {
-      const detail = await fetchJSON(`/sessions/${nextId}`)
-      setActiveChatId(detail.id)
-      setActiveChat(detail)
-    } catch (_) {
-      setActiveChatId(null)
-      setActiveChat(null)
-      setSelectedResponseId(null)
-      setSelectedCitation(null)
+    for (const nextId of candidateIds) {
+      try {
+        const detail = await fetchJSON(`/sessions/${nextId}`)
+        setActiveChatId(detail.id)
+        setActiveChat(detail)
+        setSelectedResponseId(null)
+        setSelectedCitation(null)
+        return detail
+      } catch (_) {
+        // tenta o candidato seguinte
+      }
     }
+    setActiveChatId(null)
+    setActiveChat(null)
+    setSelectedResponseId(null)
+    setSelectedCitation(null)
+    return null
   }, [activeChatId])
 
   const boot = useCallback(async () => {
     setLoading(true)
     try {
-      const [health, bootstrapPayload, corpusPayload, glossaryPayload] = await Promise.all([
+      const [health, bootstrapPayload, corpusPayload, glossaryPayload, savedPayload] = await Promise.all([
         fetchJSON('/health'),
         fetchJSON('/bootstrap'),
         fetchJSON('/corpus/overview').catch(() => []),
         fetchJSON('/glossary').catch(() => []),
+        fetchJSON('/saved').catch(() => []),
       ])
       setApiOnline(health?.status === 'ok')
       setBootstrap(bootstrapPayload || FALLBACK_BOOTSTRAP)
       setCategory((current) => bootstrapPayload?.default_category || current || 'todos')
       setCorpusSections(Array.isArray(corpusPayload) ? corpusPayload : [])
       setGlossaryEntries(Array.isArray(glossaryPayload) ? glossaryPayload : [])
+      setFavorites(normalizeSavedItems(savedPayload))
       await loadChats()
       setError('')
     } catch (err) {
@@ -151,7 +174,7 @@ function App() {
     } finally {
       setLoading(false)
     }
-  }, [loadChats])
+  }, [loadChats, normalizeSavedItems])
 
   useEffect(() => {
     boot()
@@ -254,7 +277,8 @@ function App() {
     }
   }, [apiOnline, loadChats, pushToast])
 
-  const loadChat = useCallback(async (chatId) => {
+  const loadChat = useCallback(async (chatId, options = {}) => {
+    const { silent = false } = options
     try {
       const detail = await fetchJSON(`/sessions/${chatId}`)
       setActiveChatId(detail.id)
@@ -262,11 +286,15 @@ function App() {
       setSelectedResponseId(null)
       setSelectedCitation(null)
       setMode('chat')
+      return detail
     } catch (err) {
       const message = normalizeErrorMessage(err)
       setError(message)
-      pushToast('error', 'Chat indisponível', message)
+      if (!silent) {
+        pushToast('error', 'Chat indisponível', message)
+      }
       await loadChats()
+      return null
     }
   }, [loadChats, pushToast, setMode])
 
@@ -286,17 +314,17 @@ function App() {
           await fetchJSON(`/sessions/${chatId}`, { method: 'DELETE' })
           const remaining = chats.filter((item) => item.id !== chatId)
           setChats(remaining)
+          setFavorites((current) => current.filter((item) => (item.sessionId || item.session_id) !== chatId))
           if (activeChatId === chatId) {
+            // Limpa estado imediatamente para evitar race condition com activeChatId obsoleto
+            setActiveChatId(null)
+            setActiveChat(null)
+            setSelectedResponseId(null)
+            setSelectedCitation(null)
             const nextId = remaining[0]?.id || null
             if (nextId) await loadChat(nextId)
-            else {
-              setActiveChatId(null)
-              setActiveChat(null)
-              setSelectedResponseId(null)
-              setSelectedCitation(null)
-            }
           }
-          pushToast('success', 'Chat apagado', 'A conversa foi removida com sucesso.')
+          pushToast('error', 'Chat apagado', 'A conversa foi removida com sucesso.')
         } catch (err) {
           const message = normalizeErrorMessage(err)
           setError(message)
@@ -397,36 +425,59 @@ function App() {
     }
   }, [pushToast])
 
-  const toggleFavorite = useCallback((payload) => {
+  const toggleFavorite = useCallback(async (payload) => {
     if (!activeChat || !payload?.key) return
     const exists = favorites.some((item) => item.key === payload.key)
 
     if (exists) {
-      setFavorites((current) => current.filter((item) => item.key !== payload.key))
-      pushToast('error', 'Guardado removido', 'A resposta foi removida dos guardados locais.')
+      try {
+        await fetchJSON(`/saved/${encodeURIComponent(payload.key)}`, { method: 'DELETE' })
+        setFavorites((current) => current.filter((item) => item.key !== payload.key))
+        pushToast('info', 'Guardado removido', 'A resposta foi removida dos guardados.')
+      } catch (_) {
+        // Remove localmente mesmo que backend falhe
+        setFavorites((current) => current.filter((item) => item.key !== payload.key))
+        pushToast('info', 'Guardado removido', 'O item foi removido da lista de guardados.')
+      }
       return
     }
 
     const nextItem = {
       key: payload.key,
-      responseId: payload.id,
-      sessionId: activeChat.id,
-      chatTitle: activeChat.title,
+      session_id: activeChat.id,
+      response_id: payload.id,
+      chat_title: activeChat.title,
       preview: payload.preview,
     }
-    setFavorites((current) => [nextItem, ...current.filter((item) => item.key !== payload.key)].slice(0, 24))
-    pushToast('success', 'Resposta guardada', 'A resposta foi adicionada aos guardados locais.')
+    try {
+      const saved = await fetchJSON('/saved', { method: 'POST', body: JSON.stringify(nextItem) })
+      const normalized = {
+        ...saved,
+        key: saved.key,
+        sessionId: saved.session_id,
+        chatTitle: saved.chat_title,
+        responseId: saved.response_id,
+        preview: saved.preview,
+      }
+      setFavorites((current) => [normalized, ...current.filter((item) => item.key !== payload.key)].slice(0, 50))
+      pushToast('success', 'Resposta guardada', 'A resposta foi adicionada aos guardados.')
+    } catch (_) {
+      pushToast('error', 'Falha ao guardar', 'Não foi possível guardar a resposta.')
+    }
   }, [activeChat, favorites, pushToast, setFavorites])
 
   const openFavorite = useCallback(async (item) => {
-    try {
-      await loadChat(item.sessionId)
-      setSelectedResponseId(item.responseId)
-      setMode('chat')
-    } catch (_) {
+    const sessionId = item.sessionId || item.session_id
+    const responseId = item.responseId || item.response_id
+    const detail = await loadChat(sessionId, { silent: true })
+    if (!detail) {
+      try { await fetchJSON(`/saved/${encodeURIComponent(item.key)}`, { method: 'DELETE' }) } catch (__) {}
       setFavorites((current) => current.filter((favorite) => favorite.key !== item.key))
       pushToast('info', 'Guardado limpo', 'O chat original já não existia e o guardado foi removido automaticamente.')
+      return
     }
+    setSelectedResponseId(responseId)
+    setMode('chat')
   }, [loadChat, pushToast, setFavorites, setMode])
 
   if (loading) {
@@ -447,9 +498,12 @@ function App() {
           onSearchValue={setSidebarSearch}
           favorites={favorites}
           onOpenFavorite={openFavorite}
-          onRemoveFavorite={(item) => {
+          onRemoveFavorite={async (item) => {
+            try {
+              await fetchJSON(`/saved/${encodeURIComponent(item.key)}`, { method: 'DELETE' })
+            } catch (_) { /* remove localmente mesmo assim */ }
             setFavorites((current) => current.filter((favorite) => favorite.key !== item.key))
-            pushToast('error', 'Guardado removido', 'O item foi removido da lista de guardados.')
+            pushToast('info', 'Guardado removido', 'O item foi removido da lista de guardados.')
           }}
         />
 

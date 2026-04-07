@@ -56,14 +56,31 @@ FIELD_PATTERNS = {
     "prazo": [r"Prazo para apresenta[cç][aã]o das propostas:\s*(.+)", r"aberto pelo prazo de\s*(.+?)\."],
     "prazo_exec": [r"Prazo de execu[cç][aã]o do contrato:\s*(.+)", r"Prazo de validade:\s*(.+)"],
     "valor": [r"Valor do pre[cç]o base do procedimento:\s*([\d\.\,]+\s*EUR)", r"Pre[cç]o base s/IVA:\s*([\d\.\,]+\s*EUR)"],
-    "criterios": [r"CRIT[ÉE]RIO DE ADJUDICA[CÇ][AÃ]O(.+?)(?:24\s*-\s*CONDI[CÇ][ÕO]ES DO CONTRATO|$)", r"Monofator:\s*(.+)", r"Multifator:\s*(.+)"],
-    "requisitos": [r"Documentos de habilita[cç][aã]o:\s*(.+)", r"Habilita[cç][aã]o para o exerc[ií]cio da atividade profissional:\s*(.+)", r"Requisitos de admiss[aã]o[^:]*:\s*(.+)"],
+    "criterios": [
+        r"CRIT[ÉE]RIO DE ADJUDICA[CÇ][AÃ]O\s*(.+?)(?:24\s*-\s*CONDI[CÇ][ÕO]ES DO CONTRATO|$)",
+        r"Crit[ée]rio de adjudica[cç][aã]o[^:\n]*:\s*([^\n]+)",
+        r"Monofator:\s*([^\n]+)",
+        r"Multifator:\s*([^\n]+)",
+    ],
+    "requisitos": [
+        r"Documentos de habilita[cç][aã]o:\s*(.+?)(?=\d+\s*-\s*[A-ZÁÉÍÓÚ]|$)",
+        r"Habilita[cç][aã]o para o exerc[ií]cio da atividade profissional:\s*([^\n]+(?:\n(?!\d+\s*-).*)*)",
+        r"Requisitos de admiss[aã]o[^:]*:\s*([^\n]+)",
+    ],
     "entidade": [r"Designa[cç][aã]o da entidade adjudicante:\s*(.+)", r"Emitente:\s*(.+)"],
-    "caucao": [r"Presta[cç][aã]o de cau[cç][aã]o:\s*(Sim|N[aã]o)", r"Garantia exigida:\s*(.+)"],
+    "caucao": [
+        r"Presta[cç][aã]o de cau[cç][aã]o:\s*(Sim|N[aã]o[^\n]*)",
+        r"Garantia exigida:\s*([^\n]+)",
+    ],
     "percentagem_caucao": [r"Percentagem:\s*([\d]+%)"],
     "cpv": [r"Vocabul[aá]rio Principal:\s*(\d{8})", r"CPV[:\s]+(\d{8})"],
     "lotes": [r"Procedimento com lotes\?\s*(Sim|N[aã]o)", r"Divis[aã]o em lotes:\s*(Sim|N[aã]o)"],
-    "local": [r"LOCAL DA EXECU[CÇ][AÃ]O DO CONTRATO \(PROCEDIMENTO\)(.+?)(?:10\s*-\s*PRAZO DE EXECU[CÇ][AÃ]O DO CONTRATO|$)", r"Local de trabalho:\s*(.+)", r"Local da execu[cç][aã]o do contrato:\s*(.+)"],
+    "local": [
+        r"LOCAL DA EXECU[CÇ][AÃ]O DO CONTRATO\s*(?:\(PROCEDIMENTO\))?\s*(.+?)(?:10\s*-\s*PRAZO DE EXECU[CÇ][AÃ]O|$)",
+        r"Munic[íi]pio:\s*([^\n;]+)",
+        r"Local de trabalho:\s*([^\n]+)",
+        r"Local da execu[cç][aã]o do contrato:\s*([^\n]+)",
+    ],
 }
 
 
@@ -160,8 +177,12 @@ def evaluate_confidence(query: str, analysis: QueryAnalysis, chunks: Sequence[Re
     if analysis.intent == "prazo":
         if re.search(r"prazo para apresenta[cç][aã]o das propostas:\s*[^\n]+", joined_norm):
             score += 0.28
+        elif re.search(r"prazo de execu[cç][aã]o do contrato:\s*[^\n]+", joined_norm):
+            score += 0.22
         elif re.search(r"\b\d{1,2}-\d{1,2}-\d{4}\s+\d{1,2}:\d{2}\b", joined_norm):
             score += 0.18
+        elif re.search(r"\b\d+\s*(?:meses?|dias?|semanas?)\b", joined_norm):
+            score += 0.14
         else:
             reasons.append("A evidência recuperada não mostra um prazo de apresentação suficientemente explícito.")
     elif analysis.intent == "valor":

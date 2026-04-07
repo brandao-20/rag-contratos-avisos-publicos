@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from datetime import datetime
 from typing import Any, Literal
 
 
@@ -13,8 +14,22 @@ from pydantic import BaseModel, Field
 from src import config
 from src.catalog import build_corpus_overview, get_glossary_entries
 from src.query_analysis import analyze_query
-from src.session_store import create_session, delete_session, get_session, list_sessions, upsert_session
+from src.session_store import (
+    create_session, delete_session, get_session, list_sessions, upsert_session,
+    list_saved_responses, add_saved_response, remove_saved_response,
+)
 from src.source_registry import load_source_registry
+
+import logging
+import json as _json
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+_log = logging.getLogger("rag_api")
+
 
 
 ALLOWED_CATEGORIES = [
@@ -41,6 +56,7 @@ class AskRequest(BaseModel):
 class SessionMessageModel(BaseModel):
     role: Literal["user", "assistant"]
     content: str
+    created_at: str | None = None
     qa_result: dict[str, Any] | None = None
 
 
@@ -58,6 +74,8 @@ class SessionDetailModel(BaseModel):
     title: str
     created_at: str
     updated_at: str
+    active_source_id: str | None = None
+    active_source_title: str | None = None
     messages: list[SessionMessageModel]
 
 
@@ -144,6 +162,15 @@ class GlossaryEntryModel(BaseModel):
     related_terms: list[str] = Field(default_factory=list)
 
 
+class SavedResponseModel(BaseModel):
+    key: str
+    session_id: str
+    response_id: str | None = None
+    chat_title: str | None = None
+    preview: str | None = None
+    saved_at: str | None = None
+
+
 class AskResponseModel(BaseModel):
     session: SessionDetailModel
     answer: AnswerMetaModel
@@ -177,7 +204,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -291,6 +318,21 @@ def _auto_title_from_query(query: str, *, max_length: int = 72) -> str:
     return cleaned[:max_length].rstrip()
 
 
+def _now_iso() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def _message_entry(role: Literal["user", "assistant"], content: str, *, qa_result: dict[str, Any] | None = None) -> dict[str, Any]:
+    message: dict[str, Any] = {
+        "role": role,
+        "content": content,
+        "created_at": _now_iso(),
+    }
+    if qa_result is not None:
+        message["qa_result"] = qa_result
+    return message
+
+
 
 def _safe_preview(text: str | None, *, limit: int = 140) -> str | None:
     content = " ".join((text or "").split()).strip()
@@ -383,6 +425,7 @@ def _session_to_detail(session: dict[str, Any]) -> SessionDetailModel:
             SessionMessageModel(
                 role=role,
                 content=item.get("content") or "",
+                created_at=str(item.get("created_at") or "").strip() or None,
                 qa_result=item.get("qa_result") if isinstance(item.get("qa_result"), dict) else None,
             )
         )
@@ -391,6 +434,8 @@ def _session_to_detail(session: dict[str, Any]) -> SessionDetailModel:
         title=str(session.get("title") or "Novo chat"),
         created_at=str(session.get("created_at") or ""),
         updated_at=str(session.get("updated_at") or session.get("created_at") or ""),
+        active_source_id=str(session.get("active_source_id") or "").strip() or None,
+        active_source_title=str(session.get("active_source_title") or "").strip() or None,
         messages=messages,
     )
 
@@ -529,36 +574,31 @@ def _build_need_context_payload(session: dict[str, Any], query: str) -> tuple[di
     follow_up_questions = list(config.QUESTION_SUGGESTIONS[:4])
     procedural_steps: list[str] = []
 
+    qa_result = {
+        "confidence": confidence.model_dump(),
+        "answer": answer.model_dump(),
+        "sources": [],
+        "structured_data": {},
+        "follow_up_questions": follow_up_questions,
+        "procedural_steps": procedural_steps,
+        "confidence_label": confidence.label,
+        "confidence_score": confidence.score,
+        "confidence_reasons": confidence.reasons,
+        "elapsed_ms": 0,
+        "citations_count": 0,
+        "sources_grouped": [],
+        "intent": answer.intent,
+        "retrieval_query": answer.retrieval_query,
+        "used_llm": False,
+        "response_mode": answer.response_mode,
+        "llm_label": None,
+        "retrieval_backend": None,
+        "primary_source_id": None,
+        "primary_source_title": None,
+    }
     session.setdefault("messages", [])
-    session["messages"].append({"role": "user", "content": query})
-    session["messages"].append(
-        {
-            "role": "assistant",
-            "content": markdown,
-            "qa_result": {
-                "confidence": confidence.model_dump(),
-                "answer": answer.model_dump(),
-                "sources": [],
-                "structured_data": {},
-                "follow_up_questions": follow_up_questions,
-                "procedural_steps": procedural_steps,
-                "confidence_label": confidence.label,
-                "confidence_score": confidence.score,
-                "confidence_reasons": confidence.reasons,
-                "elapsed_ms": 0,
-                "citations_count": 0,
-                "sources_grouped": [],
-                "intent": answer.intent,
-                "retrieval_query": answer.retrieval_query,
-                "used_llm": False,
-                "response_mode": answer.response_mode,
-                "llm_label": None,
-                "retrieval_backend": None,
-                "primary_source_id": None,
-                "primary_source_title": None,
-            },
-        }
-    )
+    session["messages"].append(_message_entry("user", query))
+    session["messages"].append(_message_entry("assistant", markdown, qa_result=qa_result))
     if _is_default_session_title(session.get("title")):
         session["title"] = _auto_title_from_query(query)
     persisted = upsert_session(session)
@@ -599,10 +639,35 @@ def _derive_response_mode(result: Any) -> str:
     return "llm" if bool(getattr(result, "used_llm", False)) else "heuristic"
 
 
-@app.on_event("startup")
+@app.on_event("startup")  # noqa: deprecated — substituir por lifespan quando migrar para FastAPI ≥ 0.95
 def on_startup() -> None:
     config.ensure_directories()
     _invalidate_backend_probe()
+
+
+
+# ─── Respostas guardadas (persistência no backend) ─────────────────────────────
+
+@app.get("/saved", response_model=list[SavedResponseModel])
+def api_list_saved() -> list[SavedResponseModel]:
+    """Lista respostas guardadas com integridade referencial verificada."""
+    return [SavedResponseModel(**item) for item in list_saved_responses()]
+
+
+@app.post("/saved", response_model=SavedResponseModel, status_code=201)
+def api_add_saved(payload: SavedResponseModel) -> SavedResponseModel:
+    """Guarda uma resposta. Substitui se a key já existir."""
+    item = add_saved_response(payload.model_dump())
+    return SavedResponseModel(**item)
+
+
+@app.delete("/saved/{key}")
+def api_remove_saved(key: str) -> dict[str, bool]:
+    """Remove um guardado pelo key."""
+    removed = remove_saved_response(key)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Guardado não encontrado.")
+    return {"deleted": True}
 
 
 @app.get("/health")
@@ -755,14 +820,22 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
     except HTTPException:
         raise
     except Exception as exc:
+        import logging
+        logging.getLogger("rag_api").error("RAG pipeline error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=503,
-            detail=(
-                "Backend RAG indisponível neste ambiente. "
-                f"Detalhe: {exc}"
-            ),
+            detail="Backend RAG indisponível neste ambiente. Confirma o corpus local e o estado do Ollama.",
         ) from exc
 
+    _log.info(
+        "ask query=%r intent=%s confidence=%s elapsed_ms=%s retrieval=%s source=%s",
+        payload.query[:80],
+        getattr(result.analysis, "intent", "?"),
+        getattr(result, "confidence_label", "?"),
+        getattr(result, "elapsed_ms", "?"),
+        getattr(result, "retrieval_backend", "?"),
+        getattr(result, "primary_source_id", "?"),
+    )
     sources = [_normalize_source_card(item) for item in (result.sources_grouped or []) if isinstance(item, dict)]
     follow_up_questions = _dedupe_follow_up_questions(getattr(result, "follow_up_questions", []) or [], payload.query)
     response_mode = _derive_response_mode(result)
@@ -797,36 +870,31 @@ def api_ask(session_id: str, payload: AskRequest) -> AskResponseModel:
         reasons=result.confidence_reasons,
     )
 
+    qa_result = {
+        "confidence": confidence.model_dump(),
+        "answer": answer.model_dump(),
+        "sources": [item.model_dump() for item in sources],
+        "structured_data": result.structured_data,
+        "follow_up_questions": follow_up_questions,
+        "procedural_steps": procedural_steps,
+        "confidence_label": result.confidence_label,
+        "confidence_score": result.confidence_score,
+        "confidence_reasons": result.confidence_reasons,
+        "elapsed_ms": result.elapsed_ms,
+        "citations_count": result.citations_count,
+        "sources_grouped": [item.model_dump() for item in sources],
+        "intent": result.analysis.intent,
+        "retrieval_query": result.retrieval_query,
+        "used_llm": bool(result.used_llm),
+        "response_mode": response_mode,
+        "llm_label": llm_label,
+        "retrieval_backend": getattr(result, "retrieval_backend", None),
+        "primary_source_id": primary_source_id,
+        "primary_source_title": primary_source_title,
+    }
     session.setdefault("messages", [])
-    session["messages"].append({"role": "user", "content": payload.query})
-    session["messages"].append(
-        {
-            "role": "assistant",
-            "content": result.answer_markdown,
-            "qa_result": {
-                "confidence": confidence.model_dump(),
-                "answer": answer.model_dump(),
-                "sources": [item.model_dump() for item in sources],
-                "structured_data": result.structured_data,
-                "follow_up_questions": follow_up_questions,
-                "procedural_steps": procedural_steps,
-                "confidence_label": result.confidence_label,
-                "confidence_score": result.confidence_score,
-                "confidence_reasons": result.confidence_reasons,
-                "elapsed_ms": result.elapsed_ms,
-                "citations_count": result.citations_count,
-                "sources_grouped": [item.model_dump() for item in sources],
-                "intent": result.analysis.intent,
-                "retrieval_query": result.retrieval_query,
-                "used_llm": bool(result.used_llm),
-                "response_mode": response_mode,
-                "llm_label": llm_label,
-                "retrieval_backend": getattr(result, "retrieval_backend", None),
-                "primary_source_id": primary_source_id,
-                "primary_source_title": primary_source_title,
-            },
-        }
-    )
+    session["messages"].append(_message_entry("user", payload.query))
+    session["messages"].append(_message_entry("assistant", result.answer_markdown, qa_result=qa_result))
     if _is_default_session_title(session.get("title")):
         session["title"] = _auto_title_from_query(payload.query)
     session = upsert_session(session)

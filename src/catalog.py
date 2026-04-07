@@ -139,12 +139,12 @@ def build_corpus_overview() -> list[dict[str, Any]]:
     sections: list[dict[str, Any]] = [
         {
             "id": "todos",
-            "label": "Corpus regional do Minho",
-            "description": "Conjunto curado de anúncios de procedimento focado no Minho, preparado para reduzir saltos semânticos e manter as respostas ancoradas num procedimento concreto.",
+            "label": "Corpus curado de anúncios de procedimento",
+            "description": "Conjunto curado de anúncios de procedimento preparado para reduzir saltos semânticos e manter as respostas ancoradas num procedimento concreto.",
             "sources_count": len(registry),
             "example_questions": [
                 "Procura um procedimento do Município de Braga com preço base explícito.",
-                "Mostra um procedimento do Minho onde exista prestação de caução.",
+                "Mostra um procedimento do corpus onde exista prestação de caução.",
                 "Mostra um procedimento com CPV explícito e preço base identificado.",
             ],
             "sources": [],
@@ -155,8 +155,8 @@ def build_corpus_overview() -> list[dict[str, Any]]:
         sections.append(
             {
                 "id": "municipios",
-                "label": "Municípios do Minho",
-                "description": "Procedimentos emitidos por municípios da região, úteis para perguntas sobre objeto, preço base, prazo, lotes, local e critérios.",
+                "label": "Municípios",
+                "description": "Procedimentos emitidos por municípios do corpus, úteis para perguntas sobre objeto, preço base, prazo, lotes, local e critérios.",
                 "sources_count": len(municipalities),
                 "example_questions": [
                     "Procura um procedimento do Município de Amares e identifica o objeto.",
@@ -171,12 +171,12 @@ def build_corpus_overview() -> list[dict[str, Any]]:
         sections.append(
             {
                 "id": "saude_ensino",
-                "label": "Saúde e ensino públicos",
-                "description": "Fontes da Universidade do Minho, SASUM e unidades locais de saúde, úteis para demonstrar casos com lotes, CPV, preço base e critérios multifator.",
+                "label": "Outras entidades públicas",
+                "description": "Fontes de saúde, ensino, transportes e outras entidades públicas, úteis para demonstrar casos com lotes, CPV, preço base e critérios multifator.",
                 "sources_count": len(institutions),
                 "example_questions": [
-                    "Procura um procedimento da Universidade do Minho com preço base explícito.",
-                    "Mostra um procedimento da ULS Braga e identifica o prazo de apresentação.",
+                    "Procura um procedimento universitário com preço base explícito.",
+                    "Mostra um procedimento de uma entidade pública e identifica o prazo de apresentação.",
                     "Procura um procedimento do ensino superior com lotes explícitos.",
                 ],
                 "sources": [_source_preview(source) for source in _sorted_sources(institutions)[:10]],

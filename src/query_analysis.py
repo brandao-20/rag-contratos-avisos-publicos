@@ -133,6 +133,16 @@ def _contains_any(text: str, items: Iterable[str]) -> bool:
 
 
 def classify_intent(query: str) -> str:
+    """Classifica a intenção da query.
+
+    Ordem de verificação deliberada para evitar colisões:
+    1. caucao / cpv / lotes  — termos muito específicos, sem ambiguidade
+    2. prazo                  — "prazo", "data limite", "dias"
+    3. valor                  — "preço", "preço base", "EUR"  (ANTES de criterios)
+    4. criterios              — "critério", "adjudicação"     (SEM "preço")
+    5. requisitos, entidade, local, legal
+    6. objeto                 — fallback
+    """
     qn = norm(query)
     if _contains_any(qn, config.INTENT_SYNONYMS["caucao"]):
         return "caucao"
@@ -142,6 +152,7 @@ def classify_intent(query: str) -> str:
         return "lotes"
     if _contains_any(qn, config.INTENT_SYNONYMS["prazo"]):
         return "prazo"
+    # valor ANTES de criterios — "preço" deve resolver valor, não critérios
     if _contains_any(qn, config.INTENT_SYNONYMS["valor"]):
         return "valor"
     if _contains_any(qn, config.INTENT_SYNONYMS["criterios"]):
@@ -205,22 +216,38 @@ def analyze_query(query: str) -> QueryAnalysis:
 
 
 def augment_query_for_retrieval(query: str, analysis: QueryAnalysis | None = None) -> str:
+    """Constrói query aumentada para retrieval.
+
+    Usa separação por espaço em vez de '|' para não penalizar retrieval semântico/vetorial.
+    O '|' é útil para BM25 mas confunde embeddings — usamos lista de termos concatenada.
+    """
     analysis = analysis or analyze_query(query)
     parts: list[str] = [query.strip()]
 
-    for item in analysis.must_terms[:6]:
+    for item in analysis.must_terms[:4]:
         parts.append(item)
-    for item in analysis.preferred_terms[:8]:
+    for item in analysis.preferred_terms[:6]:
         parts.append(item)
 
     if analysis.intent == "objeto":
         parts.extend(["designação do contrato", "descrição", "objeto principal", "CPV"])
     elif analysis.intent == "prazo":
-        parts.extend(["prazo para apresentação das propostas", "prazo de execução do contrato", "data limite", "prazo durante o qual os concorrentes são obrigados a manter as respetivas propostas"])
+        parts.extend([
+            "prazo para apresentação das propostas",
+            "prazo de execução do contrato",
+            "data limite",
+            "prazo durante o qual os concorrentes são obrigados a manter as respetivas propostas",
+        ])
     elif analysis.intent == "valor":
-        parts.extend(["preço base", "valor do preço base do procedimento", "preço base s/IVA", "EUR"])
+        parts.extend([
+            "preço base", "valor do preço base do procedimento",
+            "preço base s/IVA", "EUR",
+        ])
     elif analysis.intent == "requisitos":
-        parts.extend(["habilitação para o exercício da atividade profissional", "documentos de habilitação", "alvará"])
+        parts.extend([
+            "habilitação para o exercício da atividade profissional",
+            "documentos de habilitação", "alvará",
+        ])
     elif analysis.intent == "criterios":
         parts.extend(["critério de adjudicação", "monofator", "multifator", "ponderação"])
     elif analysis.intent == "caucao":
@@ -230,7 +257,7 @@ def augment_query_for_retrieval(query: str, analysis: QueryAnalysis | None = Non
     elif analysis.intent == "lotes":
         parts.extend(["procedimento com lotes", "lotes", "não", "sim"])
 
-    seen = set()
+    seen: set[str] = set()
     unique_parts: list[str] = []
     for part in parts:
         normalized = norm(part)
@@ -238,4 +265,5 @@ def augment_query_for_retrieval(query: str, analysis: QueryAnalysis | None = Non
             continue
         seen.add(normalized)
         unique_parts.append(part)
-    return " | ".join(unique_parts)
+    # Separar por espaço (em vez de '|') para compatibilidade com embeddings
+    return " ".join(unique_parts)

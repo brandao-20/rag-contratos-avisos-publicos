@@ -13,8 +13,26 @@ function ConfidenceBadge({ confidence }) {
   )
 }
 
-function StructuredGrid({ structuredData }) {
-  const entries = Object.entries(structuredData || {}).filter(([, value]) => {
+/** Alerta de incoerência: campos mostrados mas confiança baixa */
+function FieldsLowConfidenceWarning({ confidence, hasFields }) {
+  if (!hasFields) return null
+  if (!confidence || confidence.label !== 'baixa') return null
+  return (
+    <div className="fields-confidence-warning" role="alert">
+      <span className="warning-icon" aria-hidden="true">⚠</span>
+      <span>
+        A resposta principal tem <strong>confiança baixa</strong>. Os campos abaixo são
+        extraídos diretamente do documento e podem estar parcialmente corretos, mas
+        devem ser verificados na fonte antes de serem usados.
+      </span>
+    </div>
+  )
+}
+
+function StructuredGrid({ structuredData, confidence }) {
+  const entries = Object.entries(structuredData || {}).filter(([key, value]) => {
+    // Filtra metadados internos (campo de proveniência)
+    if (key.startsWith('_')) return false
     if (value == null) return false
     if (Array.isArray(value)) return value.length > 0
     if (typeof value === 'string') return value.trim().length > 0
@@ -25,28 +43,42 @@ function StructuredGrid({ structuredData }) {
     return <div className="empty-panel">Sem extração estruturada disponível para esta resposta.</div>
   }
 
+  // Mapa de proveniência por campo (opcional — enviado pelo backend como _field_citations)
+  const fieldCitations = structuredData?._field_citations || {}
+
   return (
-    <div className="structured-grid">
-      {entries.map(([key, value]) => {
-        const rendered = renderStructuredValue(key, value)
-        return (
-          <div className="structured-card" key={key}>
-            <div className="structured-label">{STRUCTURED_LABELS[key] || key.replace(/_/g, ' ')}</div>
-            {Array.isArray(rendered) ? (
-              <ul className="structured-ref-list">
-                {rendered.map((item) => (
-                  <li key={item.id}>
-                    <sup className="citation-ref">{item.citation}</sup> {item.summary}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="structured-value">{rendered}</div>
-            )}
-          </div>
-        )
-      })}
-    </div>
+    <>
+      <FieldsLowConfidenceWarning confidence={confidence} hasFields={entries.length > 0} />
+      <div className="structured-grid">
+        {entries.map(([key, value]) => {
+          const rendered = renderStructuredValue(key, value)
+          const citationIdx = fieldCitations[key]
+          return (
+            <div className="structured-card" key={key}>
+              <div className="structured-label">
+                {STRUCTURED_LABELS[key] || key.replace(/_/g, ' ')}
+                {citationIdx != null ? (
+                  <sup className="field-source-badge" title={`Extraído da citação [${citationIdx}]`}>
+                    [{citationIdx}]
+                  </sup>
+                ) : null}
+              </div>
+              {Array.isArray(rendered) ? (
+                <ul className="structured-ref-list">
+                  {rendered.map((item) => (
+                    <li key={item.id}>
+                      <sup className="citation-ref">{item.citation}</sup> {item.summary}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="structured-value">{rendered}</div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </>
   )
 }
 
@@ -155,7 +187,12 @@ export default function InspectorPanel({
               </div>
             ) : null}
 
-            {selectedTab === 'campos' ? <StructuredGrid structuredData={selectedPayload.structuredData} /> : null}
+            {selectedTab === 'campos' ? (
+              <StructuredGrid
+                structuredData={selectedPayload.structuredData}
+                confidence={selectedPayload.confidence}
+              />
+            ) : null}
             {selectedTab === 'citacao' ? <CitationInspector citation={selectedCitation} /> : null}
             {selectedTab === 'metadados' ? <MetadataPanel payload={selectedPayload} debugMode={debugMode} /> : null}
           </>

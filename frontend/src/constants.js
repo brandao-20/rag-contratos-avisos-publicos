@@ -12,8 +12,8 @@ export const FALLBACK_SUGGESTIONS = [
   'Procura um procedimento do Município de Braga com preço base explícito.',
   'Mostra um procedimento de Arcos de Valdevez e verifica se tem lotes.',
   'Procura um procedimento de Viana do Castelo e indica o prazo de apresentação.',
-  'Mostra um procedimento da zona do Minho onde exista prestação de caução.',
-  'Procura um procedimento do Minho com entidade adjudicante identificada.',
+  'Mostra um procedimento do corpus onde exista prestação de caução.',
+  'Procura um procedimento do corpus com entidade adjudicante identificada.',
   'Mostra um procedimento com CPV explícito e preço base identificado.',
 ]
 

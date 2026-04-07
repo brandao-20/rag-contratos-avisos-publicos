@@ -24,21 +24,62 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_REQUEST_TIMEOUT = int(os.getenv("OLLAMA_REQUEST_TIMEOUT", "120"))
 
 SESSIONS_FILE = APP_STATE_DIR / "sessions.json"
+SAVED_RESPONSES_FILE = APP_STATE_DIR / "saved_responses.json"
 INDEX_METADATA_FILE = APP_STATE_DIR / "index_metadata.json"
 GOLDEN_QA_FILE = TESTS_DIR / "golden_qa_publicos.json"
 
+# ─── Correção crítica: "preço" removido de criterios e colocado em valor ───
+# "preço" sozinho é quase sempre uma pergunta sobre valor/preço base, não critérios.
+# A classificação anterior causava "Qual é o preço?" → intent=criterios (ERRADO).
 INTENT_SYNONYMS = {
-    "objeto": ["objeto", "designacao", "designação", "descrição", "descricao", "contrato", "aquisição", "aquisicao", "empreitada", "serviço", "servico"],
-    "prazo": ["prazo", "data limite", "dias", "prazo apresentação", "prazo de execução", "prazo de candidatura", "apresentação das propostas", "apresentacao das propostas", "prazo para apresentação"],
-    "requisitos": ["requisito", "habilitação", "habilitacao", "habilitações", "participação", "participacao", "admissão", "admissao", "alvará", "alvara", "documentos de habilitação", "documentos de habilitacao"],
-    "valor": ["preço base", "preco base", "valor base", "orçamento", "orcamento", "eur", "euros", "montante"],
-    "criterios": ["critério", "criterio", "adjudicação", "adjudicacao", "monofator", "multifator", "ponderação", "ponderacao", "preço", "qualidade"],
-    "entidade": ["entidade adjudicante", "entidade", "adjudicante", "emitente", "município", "municipio", "universidade", "secretaria", "epe"],
-    "local": ["local", "execução", "execucao", "freguesia", "concelho", "distrito", "instalações", "instalacoes", "localidade"],
+    "objeto": [
+        "objeto", "designacao", "designação", "descrição", "descricao",
+        "contrato", "aquisição", "aquisicao", "empreitada", "serviço", "servico",
+        "sumário", "sumario",
+    ],
+    "prazo": [
+        "prazo", "data limite", "dias", "prazo apresentação", "prazo de execução",
+        "prazo de candidatura", "apresentação das propostas", "apresentacao das propostas",
+        "prazo para apresentação", "data de entrega", "data de submissão",
+    ],
+    "requisitos": [
+        "requisito", "habilitação", "habilitacao", "habilitações", "participação",
+        "participacao", "admissão", "admissao", "alvará", "alvara",
+        "documentos de habilitação", "documentos de habilitacao", "documentos exigidos",
+        "habilitações exigidas",
+    ],
+    # valor vem ANTES de criterios para que "preço" → valor
+    "valor": [
+        "preço base", "preco base", "valor base", "orçamento", "orcamento",
+        "eur", "euros", "montante", "preço", "preco", "custo", "dotação",
+    ],
+    "criterios": [
+        "critério", "criterio", "adjudicação", "adjudicacao", "monofator",
+        "multifator", "ponderação", "ponderacao", "qualidade", "critérios de adjudicação",
+    ],
+    "entidade": [
+        "entidade adjudicante", "entidade", "adjudicante", "emitente",
+        "município", "municipio", "universidade", "secretaria", "epe",
+        "câmara", "camara", "instituto", "fundação",
+    ],
+    "local": [
+        "local", "execução", "execucao", "freguesia", "concelho", "distrito",
+        "instalações", "instalacoes", "localidade", "morada", "endereço",
+        "NUT", "nut",
+    ],
     "legal": ["artigo", "regime", "lei", "portaria", "decreto-lei", "fundamento legal"],
-    "caucao": ["caução", "caucao", "prestação de caução", "prestacao de caucao", "garantia exigida", "garantia"],
-    "cpv": ["cpv", "vocabulário principal", "vocabulário comum para os contratos públicos", "vocabulário comum", "vocabulário"],
-    "lotes": ["lotes", "procedimento com lotes", "tem lotes", "há lotes", "ha lotes"],
+    "caucao": [
+        "caução", "caucao", "prestação de caução", "prestacao de caucao",
+        "garantia exigida", "garantia", "caution",
+    ],
+    "cpv": [
+        "cpv", "vocabulário principal", "vocabulário comum para os contratos públicos",
+        "vocabulário comum", "vocabulário",
+    ],
+    "lotes": [
+        "lotes", "procedimento com lotes", "tem lotes", "há lotes", "ha lotes",
+        "divisão em lotes", "divisao em lotes",
+    ],
 }
 
 QUESTION_SUGGESTIONS = [
