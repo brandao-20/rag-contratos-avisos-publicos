@@ -3,7 +3,7 @@ import React from 'react'
 export default function HeroHome({ suggestions, onAsk, disabled }) {
   return (
     <section className="hero-home panel">
-      <h1>Consulta documental de contratação pública</h1>
+      <h1>Consulta documental de contratos e avisos públicos</h1>
       <p>
         Explora perguntas sobre objeto, entidade adjudicante, prazos, preço base, critérios,
         caução, CPV, lotes, local de execução e requisitos. Esta demonstração usa um corpus curado
